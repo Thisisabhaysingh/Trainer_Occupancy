@@ -1,0 +1,189 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git branch, tag, or commit to deploy
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Validate backend
+        run: npm run ci:backend
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: client
+        run: npm run build
+
+  deploy:
+    name: Deploy to Bitnami
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out release metadata
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.ref }}
+          fetch-depth: 0
+
+      - name: Resolve release commit
+        id: release
+        shell: bash
+        run: |
+          RELEASE_SHA="$(git rev-parse HEAD)"
+          echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          git bundle create "mis-release-$RELEASE_SHA.bundle" HEAD
+
+      - name: Configure server SSH access
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+        run: |
+          test -n "$PROD_HOST"
+          test -n "$PROD_SSH_KEY"
+          SSH_PORT="${PROD_SSH_PORT:-22}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PROD_SSH_KEY" > ~/.ssh/production_key
+          chmod 600 ~/.ssh/production_key
+          ssh-keyscan -p "$SSH_PORT" -H "$PROD_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload release bundle
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          SSH_PORT="${PROD_SSH_PORT:-22}"
+          SERVER_USER="${PROD_USER:-bitnami}"
+          scp -i ~/.ssh/production_key -P "$SSH_PORT" \
+            "mis-release-$RELEASE_SHA.bundle" \
+            "$SERVER_USER@$PROD_HOST:/tmp/mis-release-$RELEASE_SHA.bundle"
+
+      - name: Deploy release with automatic rollback
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+          PROD_PATH: ${{ secrets.PROD_PATH }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          SSH_PORT="${PROD_SSH_PORT:-22}"
+          SERVER_USER="${PROD_USER:-bitnami}"
+          SERVER_PATH="${PROD_PATH:-/home/bitnami/MIS}"
+          RELEASE_BUNDLE="/tmp/mis-release-$RELEASE_SHA.bundle"
+
+          ssh -i ~/.ssh/production_key -p "$SSH_PORT" "$SERVER_USER@$PROD_HOST" \
+            "DEPLOY_SHA='$RELEASE_SHA' APP_PATH='$SERVER_PATH' RELEASE_BUNDLE='$RELEASE_BUNDLE' bash -s" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          cd "$APP_PATH"
+          PREVIOUS_SHA="$(git rev-parse HEAD)"
+          ENV_BACKUP_DIR="$(mktemp -d)"
+
+          test -f .env
+          test -f client/.env
+          cp .env "$ENV_BACKUP_DIR/backend.env"
+          cp client/.env "$ENV_BACKUP_DIR/frontend.env"
+
+          restore_environment() {
+            cp "$ENV_BACKUP_DIR/backend.env" .env
+            mkdir -p client
+            cp "$ENV_BACKUP_DIR/frontend.env" client/.env
+          }
+
+          restart_application() {
+            mkdir -p logs
+            pm2 startOrReload ecosystem.config.js --env production --update-env
+            pm2 save
+          }
+
+          rollback() {
+            exit_code=$?
+            trap - ERR
+            set +e
+            echo "Deployment failed. Rolling back to $PREVIOUS_SHA"
+            git reset --hard "$PREVIOUS_SHA"
+            restore_environment
+            npm ci --omit=dev
+            npm ci --prefix client
+            npm run build --prefix client
+            restart_application
+            rm -rf "$ENV_BACKUP_DIR"
+            rm -f "$RELEASE_BUNDLE"
+            exit "$exit_code"
+          }
+
+          trap rollback ERR
+
+          git fetch "$RELEASE_BUNDLE" "$DEPLOY_SHA"
+          git reset --hard "$DEPLOY_SHA"
+          restore_environment
+
+          npm ci --omit=dev
+          npm ci --prefix client
+          npm run build --prefix client
+
+          restart_application
+
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error http://127.0.0.1:5001/api/health; then
+              echo
+              echo "Production deployment succeeded: $DEPLOY_SHA"
+              trap - ERR
+              rm -rf "$ENV_BACKUP_DIR"
+              rm -f "$RELEASE_BUNDLE"
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "Health check failed after deployment."
+          false
+          REMOTE_SCRIPT

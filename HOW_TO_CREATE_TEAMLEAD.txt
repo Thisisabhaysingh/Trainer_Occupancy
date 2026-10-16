@@ -1,0 +1,343 @@
+=====================================================
+HOW TO CREATE AND MANAGE TEAM LEAD USERS
+=====================================================
+
+OVERVIEW:
+---------
+Team Leads are a new role between Managers and Employees. Each department can have one Team Lead who manages employees within that specific department.
+
+=====================================================
+METHOD 1: CREATE TEAM LEAD VIA ADMIN DASHBOARD (RECOMMENDED)
+=====================================================
+
+Step 1: Login as Admin
+-----------------------
+1. Go to your application URL
+2. Login with admin credentials
+3. You will be redirected to the Admin Dashboard
+
+Step 2: Navigate to Manage Employees
+-------------------------------------
+1. Click on "Manage Employees" tab in the Admin Dashboard
+2. You will see all existing employees listed
+
+Step 3: Add New Team Lead
+--------------------------
+1. Click on the "+ Add Employee" card
+2. Fill in the form:
+   - Employee Code: e.g., "TL001" (must be unique)
+   - Name: Full name of the team lead
+   - Email: Valid email address (must be unique)
+   - Department: Select the department they will lead
+   - Role: Select "Team Lead" from the dropdown
+   - Password: Set a secure password
+3. Click "Add Employee" button
+4. The team lead user will be created
+
+Step 4: Verify Team Lead Creation
+----------------------------------
+1. The new team lead should appear in the employee list
+2. Their role should show as "teamlead"
+3. They can now login using their email and password
+
+=====================================================
+METHOD 2: EDIT EXISTING EMPLOYEE TO TEAM LEAD
+=====================================================
+
+Step 1: Login as Admin
+-----------------------
+1. Go to your application URL
+2. Login with admin credentials
+
+Step 2: Find the Employee
+--------------------------
+1. Go to "Manage Employees" section
+2. Find the employee you want to promote to Team Lead
+3. Click the "Edit" button on their card
+
+Step 3: Change Role to Team Lead
+---------------------------------
+1. In the Edit Employee dialog:
+   - Keep Name, Email, and Department as is
+   - Change Role dropdown to "Team Lead"
+2. Click "Update Employee"
+3. The employee is now a Team Lead
+
+Step 4: Verify the Change
+--------------------------
+1. The employee's role should now show as "teamlead"
+2. They can login and access the Team Lead dashboard
+
+=====================================================
+METHOD 3: CREATE TEAM LEAD VIA API (FOR DEVELOPERS)
+=====================================================
+
+Using cURL or Postman:
+----------------------
+
+POST /api/employees
+Headers:
+  Content-Type: application/json
+  Cookie: token=<your-admin-jwt-token>
+
+Body:
+{
+  "employeeCode": "TL001",
+  "name": "John Doe",
+  "email": "john.doe@company.com",
+  "password": "SecurePassword123",
+  "role": "teamlead",
+  "departmentId": 1,
+  "branchId": 1
+}
+
+Response (Success):
+{
+  "employeeCode": "TL001",
+  "name": "John Doe",
+  "email": "john.doe@company.com",
+  "role": "teamlead",
+  "departmentId": 1,
+  "branchId": 1
+}
+
+=====================================================
+METHOD 4: CREATE TEAM LEAD VIA DATABASE (DIRECT SQL)
+=====================================================
+
+IMPORTANT: Only use this method if you have direct database access and understand SQL.
+
+Step 1: Hash the Password
+--------------------------
+Use bcrypt to hash the password. You can use an online bcrypt generator or Node.js:
+
+const bcrypt = require('bcryptjs');
+const hashedPassword = await bcrypt.hash('YourPassword123', 10);
+console.log(hashedPassword);
+
+Step 2: Insert Team Lead User
+------------------------------
+INSERT INTO `users` (
+  `employeeCode`, 
+  `name`, 
+  `email`, 
+  `password`, 
+  `role`, 
+  `departmentId`, 
+  `branchId`, 
+  `createdAt`, 
+  `updatedAt`
+)
+VALUES (
+  'TL001',
+  'John Doe',
+  'john.doe@company.com',
+  '$2a$10$hashedPasswordHere',  -- Use the hashed password from Step 1
+  'teamlead',
+  1,  -- Department ID
+  1,  -- Branch ID (optional)
+  NOW(),
+  NOW()
+);
+
+Step 3: Assign Team Lead to Department (Optional)
+--------------------------------------------------
+UPDATE `departments` 
+SET `teamLeadId` = 'TL001' 
+WHERE `id` = 1;
+
+=====================================================
+TEAM LEAD LOGIN AND ACCESS
+=====================================================
+
+How Team Leads Login:
+----------------------
+1. Go to the login page
+2. Enter their email and password
+3. They will be automatically redirected to /teamlead dashboard
+4. They will see their department's analytics and employees
+
+What Team Leads Can Do:
+------------------------
+✓ View department analytics
+✓ View all employees in their department
+✓ View all activities in their department
+✓ Assign activities to employees
+✓ Track employee performance
+✓ View day-wise hours and productivity trends
+
+What Team Leads CANNOT Do:
+---------------------------
+✗ Create new users (only admin and manager can)
+✗ Access other departments' data
+✗ Manage employees outside their department
+✗ Delete users or departments
+✗ Access admin or manager dashboards
+
+=====================================================
+ASSIGNING TEAM LEAD TO DEPARTMENT
+=====================================================
+
+Via Admin Dashboard:
+--------------------
+Currently, you need to assign team leads to departments via database.
+
+Via Database:
+-------------
+UPDATE `departments` 
+SET `teamLeadId` = 'TL001'  -- Employee code of the team lead
+WHERE `id` = 1;  -- Department ID
+
+Verify Assignment:
+------------------
+SELECT 
+  d.id,
+  d.name AS department_name,
+  d.teamLeadId,
+  u.name AS team_lead_name
+FROM `departments` d
+LEFT JOIN `users` u ON d.teamLeadId = u.employeeCode
+WHERE d.id = 1;
+
+=====================================================
+MANAGING MULTIPLE TEAM LEADS
+=====================================================
+
+One Team Lead Per Department:
+------------------------------
+- Each department should have only ONE team lead
+- If you assign a new team lead to a department, it will replace the previous one
+
+Multiple Departments with Team Leads:
+--------------------------------------
+- You can have multiple team leads in your organization
+- Each team lead manages their own department
+- Team leads cannot see other departments' data
+
+Example Structure:
+------------------
+Branch: Mumbai
+  └── Department: Coding
+      └── Team Lead: TL001 (John Doe)
+      └── Employees: EMP001, EMP002, EMP003
+  └── Department: Mechatronics
+      └── Team Lead: TL002 (Jane Smith)
+      └── Employees: EMP004, EMP005
+
+Branch: Delhi
+  └── Department: Electronics
+      └── Team Lead: TL003 (Bob Johnson)
+      └── Employees: EMP006, EMP007
+
+=====================================================
+TESTING TEAM LEAD FUNCTIONALITY
+=====================================================
+
+Test Checklist:
+---------------
+[ ] Team lead can login successfully
+[ ] Team lead is redirected to /teamlead dashboard
+[ ] Dashboard shows department analytics
+[ ] Employee list shows only department employees
+[ ] Activities list shows only department activities
+[ ] Team lead can assign activities to employees
+[ ] Team lead cannot access admin or manager routes
+[ ] Logout works correctly
+
+Test Credentials (Example):
+----------------------------
+Email: teamlead@company.com
+Password: (the password you set)
+Expected Redirect: /teamlead
+
+=====================================================
+TROUBLESHOOTING
+=====================================================
+
+Issue: Team Lead Cannot Login
+------------------------------
+Solution:
+1. Verify the user exists in the database
+2. Check that role is set to 'teamlead' (not 'team lead' or 'TeamLead')
+3. Verify email and password are correct
+4. Check database migrations were applied
+
+Issue: Team Lead Sees No Data
+------------------------------
+Solution:
+1. Verify team lead has a departmentId assigned
+2. Check that department has employees
+3. Ensure activities exist for that department
+4. Verify foreign key relationships are correct
+
+Issue: Team Lead Can Access Admin Routes
+-----------------------------------------
+Solution:
+1. Check that role is exactly 'teamlead' in database
+2. Verify middleware is checking roles correctly
+3. Clear browser cookies and login again
+
+Issue: "Unknown column 'branchId'" Error
+-----------------------------------------
+Solution:
+1. Run the database migration queries
+2. Ensure branchId column exists in users table
+3. Restart your server after migrations
+
+=====================================================
+SAMPLE DATA FOR TESTING
+=====================================================
+
+Create Test Team Lead:
+----------------------
+Employee Code: TL_TEST_001
+Name: Test Team Lead
+Email: teamlead.test@company.com
+Password: TestPassword123
+Role: teamlead
+Department: Select any existing department
+
+Login and Test:
+---------------
+1. Login with teamlead.test@company.com
+2. Password: TestPassword123
+3. Should redirect to /teamlead
+4. Should see department dashboard
+
+=====================================================
+BEST PRACTICES
+=====================================================
+
+1. Use Descriptive Employee Codes:
+   - Good: TL_CODING_001, TL_MECH_001
+   - Bad: TL1, TEAMLEAD1
+
+2. Assign Team Leads to Departments:
+   - Always link team leads to their departments
+   - Update department.teamLeadId field
+
+3. Set Strong Passwords:
+   - Minimum 8 characters
+   - Mix of letters, numbers, and symbols
+
+4. Document Team Lead Assignments:
+   - Keep a record of which team lead manages which department
+   - Update documentation when changes occur
+
+5. Regular Access Reviews:
+   - Periodically review team lead permissions
+   - Remove access when team leads change roles
+
+=====================================================
+SUPPORT AND HELP
+=====================================================
+
+For more information, refer to:
+- BRANCH_TEAMLEAD_IMPLEMENTATION.txt - Complete implementation guide
+- DATABASE_MIGRATION_QUERIES.sql - Database schema changes
+- routes/teamlead.js - Backend API endpoints
+- pages/TeamLeadDashboard.jsx - Frontend dashboard
+
+=====================================================
+END OF GUIDE
+=====================================================

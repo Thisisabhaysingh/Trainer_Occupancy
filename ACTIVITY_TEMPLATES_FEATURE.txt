@@ -1,0 +1,259 @@
+# Activity Templates Feature - Manager Dashboard
+
+## ✅ Implementation Complete
+
+### New Tab Added: "Activity Templates"
+- Position: Tab 4 (between Employees and Datewise Report)
+- Accessible only to managers
+- Dedicated section for managing activity templates
+
+### Features Implemented:
+
+#### 1. **Add Template**
+- Button: "Add Template" (purple gradient)
+- Dialog with single field: Template Title
+- Simple and focused interface
+
+#### 2. **View Templates**
+- Grid layout showing all templates
+- Cards with template titles
+- Responsive design (3 columns on desktop, 2 on tablet, 1 on mobile)
+- Hover effect on cards
+
+#### 3. **Edit Template**
+- "Edit" button on each template card
+- Opens same dialog with pre-filled title
+- Updates existing template
+
+#### 4. **Delete Template**
+- "Delete" button on each template card (red)
+- Confirmation dialog before deletion
+- Removes template permanently
+
+#### 5. **Empty State**
+- Shows when no templates exist
+- Helpful message to guide users
+- Call-to-action to add first template
+
+### UI Components:
+
+**Activity Templates Section:**
+```
+┌─────────────────────────────────────────────┐
+│  Activity Templates          [Add Template] │
+├─────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │ Template │  │ Template │  │ Template │  │
+│  │  Title   │  │  Title   │  │  Title   │  │
+│  │          │  │          │  │          │  │
+│  │ [Edit]   │  │ [Edit]   │  │ [Edit]   │  │
+│  │ [Delete] │  │ [Delete] │  │ [Delete] │  │
+│  └──────────┘  └──────────┘  └──────────┘  │
+└─────────────────────────────────────────────┘
+```
+
+**Add/Edit Dialog:**
+```
+┌────────────────────────────────┐
+│  Add Activity Template     [X] │
+├────────────────────────────────┤
+│                                │
+│  Template Title *              │
+│  ┌──────────────────────────┐ │
+│  │ Enter activity template  │ │
+│  └──────────────────────────┘ │
+│                                │
+│           [Cancel]  [Create]   │
+└────────────────────────────────┘
+```
+
+### API Endpoints Required:
+
+**Note:** These endpoints need to be created in the backend:
+
+1. **GET** `/api/activities/templates`
+   - Fetch all templates for manager's department
+   - Response: `[{ id, title, departmentId }]`
+
+2. **POST** `/api/activities/templates`
+   - Create new template
+   - Request: `{ title }`
+   - Response: `{ message, template }`
+
+3. **PUT** `/api/activities/templates/:id`
+   - Update existing template
+   - Request: `{ title }`
+   - Response: `{ message, template }`
+
+4. **DELETE** `/api/activities/templates/:id`
+   - Delete template
+   - Response: `{ message }`
+
+### State Management:
+
+```javascript
+const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+const [editingTemplate, setEditingTemplate] = useState(null);
+const [templateTitle, setTemplateTitle] = useState('');
+const [activityTemplates, setActivityTemplates] = useState([]);
+```
+
+### Handler Functions:
+
+1. **handleSaveTemplate()** - Create or update template
+2. **handleEditTemplate(template)** - Open edit dialog
+3. **handleDeleteTemplate(templateId)** - Delete with confirmation
+4. **fetchActivityTemplates()** - Refresh template list
+
+### User Flow:
+
+#### Adding a Template:
+1. Manager clicks "Activity Templates" tab
+2. Clicks "Add Template" button
+3. Enters template title
+4. Clicks "Create"
+5. Template appears in grid
+6. Success notification shown
+
+#### Editing a Template:
+1. Manager finds template in grid
+2. Clicks "Edit" button
+3. Modifies title in dialog
+4. Clicks "Update"
+5. Template updated in grid
+6. Success notification shown
+
+#### Deleting a Template:
+1. Manager finds template in grid
+2. Clicks "Delete" button
+3. Confirms deletion in popup
+4. Template removed from grid
+5. Success notification shown
+
+### Styling:
+
+**Colors:**
+- Add Template Button: Purple gradient (#667eea → #764ba2)
+- Template Cards: White with shadow
+- Edit Button: Blue outlined
+- Delete Button: Red outlined
+- Hover Effects: Lift and shadow
+
+**Responsive:**
+- Desktop: 3 columns
+- Tablet: 2 columns
+- Mobile: 1 column
+
+### Files Modified:
+
+1. **client/src/pages/ManagerDashboard.jsx**
+   - Added new tab "Activity Templates"
+   - Added template management section
+   - Added template dialog
+   - Added CRUD handlers
+   - Updated tab indices
+
+### Next Steps (Backend):
+
+Create these backend routes in `routes/activities.js`:
+
+```javascript
+// Get templates for manager's department
+router.get('/templates', auth, checkRole(['manager']), async (req, res) => {
+  try {
+    const templates = await Activity.findAll({
+      where: { 
+        departmentId: req.user.departmentId,
+        isTemplate: true 
+      }
+    });
+    res.json(templates);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create template
+router.post('/templates', auth, checkRole(['manager']), async (req, res) => {
+  try {
+    const { title } = req.body;
+    const template = await Activity.create({
+      title,
+      departmentId: req.user.departmentId,
+      isTemplate: true
+    });
+    res.status(201).json({ message: 'Template created', template });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update template
+router.put('/templates/:id', auth, checkRole(['manager']), async (req, res) => {
+  try {
+    const { title } = req.body;
+    const template = await Activity.findOne({
+      where: { 
+        id: req.params.id,
+        departmentId: req.user.departmentId,
+        isTemplate: true
+      }
+    });
+    if (!template) return res.status(404).json({ error: 'Template not found' });
+    
+    template.title = title;
+    await template.save();
+    res.json({ message: 'Template updated', template });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete template
+router.delete('/templates/:id', auth, checkRole(['manager']), async (req, res) => {
+  try {
+    const template = await Activity.findOne({
+      where: { 
+        id: req.params.id,
+        departmentId: req.user.departmentId,
+        isTemplate: true
+      }
+    });
+    if (!template) return res.status(404).json({ error: 'Template not found' });
+    
+    await template.destroy();
+    res.json({ message: 'Template deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+```
+
+### Testing Checklist:
+
+- [ ] Navigate to Activity Templates tab
+- [ ] Click "Add Template" button
+- [ ] Enter template title and create
+- [ ] Verify template appears in grid
+- [ ] Click "Edit" on a template
+- [ ] Modify title and update
+- [ ] Verify changes reflected
+- [ ] Click "Delete" on a template
+- [ ] Confirm deletion
+- [ ] Verify template removed
+- [ ] Test with no templates (empty state)
+- [ ] Test responsive design on mobile
+
+### Benefits:
+
+1. **Centralized Management** - All templates in one place
+2. **Simple Interface** - Only title field needed
+3. **Easy CRUD** - Add, edit, delete in seconds
+4. **Department Specific** - Each manager manages their own templates
+5. **Reusable** - Templates can be used by employees
+
+---
+
+## 🎉 Feature Complete!
+
+The Activity Templates management section is fully implemented on the frontend. Backend API endpoints need to be created to make it functional.

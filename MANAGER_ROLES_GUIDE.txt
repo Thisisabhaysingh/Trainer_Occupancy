@@ -1,0 +1,176 @@
+# Manager Roles Implementation Guide
+
+## Overview
+This system implements two types of managers with different access levels:
+
+1. **Branch Manager** - Can view and manage ALL employees in their branch, regardless of department
+2. **Department Manager** - Can view and manage ONLY employees in their specific department
+
+## Implementation Details
+
+### Backend Changes
+
+#### 1. User Model (models/User.js)
+- Already has `managerType` field with ENUM('branch', 'department')
+- This field determines the manager's access scope
+
+#### 2. Employee Routes (routes/employees.js)
+
+**GET /api/employees** - List Employees
+- Admin: Sees all employees, teamleads, and managers
+- Branch Manager: Sees all employees in their branch (filtered by branchId)
+- Department Manager: Sees only employees in their department (filtered by departmentId)
+
+**POST /api/employees** - Create Employee
+- Requires `managerType` field when creating a manager role
+- Branch managers can only create employees in their branch
+- Department managers can only create employees in their department
+- Validates that branch managers have a branchId assigned
+
+**PUT /api/employees/:employeeId** - Update Employee
+- Now accessible to both admin and manager roles
+- Branch managers can only edit employees in their branch
+- Department managers can only edit employees in their department
+- Supports updating managerType when role is 'manager'
+
+### Frontend Changes
+
+#### AdminDashboard.jsx
+
+**Add/Edit Employee Dialog**
+- Added `managerType` field to employee creation form
+- Shows "Manager Type" dropdown when role is set to "manager"
+- Options: "Department Manager" or "Branch Manager"
+- Field is required when creating/editing a manager
+
+**State Management**
+- Updated `editEmployeeData` state to include `managerType`
+- Updated all handlers to pass managerType to backend
+
+## Usage Instructions
+
+### Creating a Manager
+
+1. **From Admin Dashboard:**
+   - Go to "Manage Employees" tab
+   - Click "Add Employee" or "Add Manager"
+   - Fill in employee details
+   - Select role as "Manager"
+   - A new field "Manager Type" will appear
+   - Choose either:
+     - **Department Manager**: Will only see employees in their department
+     - **Branch Manager**: Will see all employees in their branch
+   - For Branch Manager, ensure you select a branch
+   - Click "Add Manager"
+
+2. **From Manager Dashboard:**
+   - Managers can also create employees within their scope
+   - Branch managers can create employees in any department within their branch
+   - Department managers can only create employees in their own department
+
+### Editing an Employee as Manager
+
+1. **Branch Manager:**
+   - Can edit any employee in their branch
+   - Can change employee's department (within the same branch)
+   - Can promote employees to teamlead or manager
+
+2. **Department Manager:**
+   - Can only edit employees in their department
+   - Can change employee details but not move them to other departments
+   - Can promote employees to teamlead
+
+### Viewing Employees
+
+**Branch Manager Dashboard:**
+- Shows all employees across all departments in their branch
+- Department cards show metrics for each department
+- Can filter and search across all branch employees
+
+**Department Manager Dashboard:**
+- Shows only employees in their specific department
+- Department cards show only their department
+- Limited to their department's data
+
+## API Endpoints Summary
+
+### Employee Management
+```
+GET    /api/employees                    - List employees (filtered by manager type)
+POST   /api/employees                    - Create employee (with manager type validation)
+PUT    /api/employees/:employeeId        - Update employee (with permission checks)
+DELETE /api/employees/:employeeId        - Delete employee (admin only)
+```
+
+### Manager Analytics
+```
+GET    /api/manager/analytics            - Get manager dashboard data (filtered by type)
+GET    /api/manager/employees            - Get employees in manager's scope
+GET    /api/manager/employee/:id/analytics - Get specific employee analytics
+```
+
+## Database Schema
+
+### Users Table
+```sql
+- employeeCode (PK)
+- name
+- email
+- password
+- role (ENUM: 'admin', 'manager', 'teamlead', 'employee')
+- managerType (ENUM: 'branch', 'department') - NEW FIELD
+- departmentId (FK)
+- branchId (FK)
+```
+
+## Security & Permissions
+
+### Access Control Matrix
+
+| Action | Admin | Branch Manager | Department Manager | Team Lead | Employee |
+|--------|-------|----------------|-------------------|-----------|----------|
+| View all employees | ✓ | Branch only | Department only | - | - |
+| Create employee | ✓ | Branch only | Department only | Department only | - |
+| Edit employee | ✓ | Branch only | Department only | - | - |
+| Delete employee | ✓ | - | - | - | - |
+| Create manager | ✓ | - | - | - | - |
+| View analytics | ✓ | Branch scope | Department scope | Department scope | Own only |
+
+## Testing Checklist
+
+- [ ] Create a branch manager and verify they see all branch employees
+- [ ] Create a department manager and verify they see only their department
+- [ ] Test branch manager creating employees in different departments
+- [ ] Test department manager cannot create employees in other departments
+- [ ] Test branch manager editing employees across departments
+- [ ] Test department manager cannot edit employees in other departments
+- [ ] Verify manager type dropdown appears only for manager role
+- [ ] Test editing existing manager's managerType
+- [ ] Verify analytics show correct data based on manager type
+
+## Migration Notes
+
+If you have existing managers in the database without managerType:
+1. They will default to department manager behavior
+2. Update their managerType field manually:
+   ```sql
+   UPDATE users 
+   SET managerType = 'branch' 
+   WHERE employeeCode = 'MANAGER_CODE' AND role = 'manager';
+   ```
+
+## Troubleshooting
+
+**Issue: Manager sees no employees**
+- Check that manager has correct branchId or departmentId assigned
+- Verify managerType is set correctly
+- Ensure employees have matching branchId/departmentId
+
+**Issue: Cannot create manager**
+- Ensure managerType is provided
+- For branch managers, branchId must be set
+- Check that branch/department exists
+
+**Issue: Permission denied when editing**
+- Verify manager is trying to edit employee in their scope
+- Check that employee's branchId/departmentId matches manager's scope

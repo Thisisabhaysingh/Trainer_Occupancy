@@ -1,0 +1,10 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { projectApi } from '../api/projectApi';
+export const projectKeys = { all: ['projects'], list: (params) => ['projects', 'list', params || {}], detail: (id) => ['projects', 'detail', id], mine: ['projects', 'mine'] };
+export const useProjects = (params) => useQuery({ queryKey: projectKeys.list(params), queryFn: () => projectApi.list(params) });
+export const useProject = (id) => useQuery({ queryKey: projectKeys.detail(id), queryFn: () => projectApi.get(id), enabled: Boolean(id) });
+export const useMyProjects = () => useQuery({ queryKey: projectKeys.mine, queryFn: projectApi.myProjects });
+const useInvalidatingMutation = (fn) => { const client = useQueryClient(); return useMutation({ mutationFn: fn, onSuccess: () => client.invalidateQueries({ queryKey: projectKeys.all }) }); };
+export const useCreateProject = () => useInvalidatingMutation(projectApi.create);
+export const useUpdateProject = () => useInvalidatingMutation(({ id, data }) => projectApi.update(id, data));
+export const useDeleteProject = () => useInvalidatingMutation(projectApi.remove);

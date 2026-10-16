@@ -1,0 +1,120 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mis-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-mis_root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mis_database}
+    ports:
+      - "${MYSQL_PORT:-3307}:3306"
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - mis-network
+
+  db-init:
+    image: mysql:8.0
+    container_name: mis-db-init
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-mis_root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mis_database}
+    volumes:
+      - ./mis_database_backup.sql:/patches/base_backup.sql:ro
+      - ./migrations/server_safe_schema_seed_patch.sql:/patches/server_safe_schema_seed_patch.sql:ro
+    command: >
+      sh -c "TABLE_EXISTS=$$(mysql -hmysql -uroot -p$${MYSQL_ROOT_PASSWORD} -N -s
+      -e \"SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$${MYSQL_DATABASE}' AND TABLE_NAME='users'\");
+      if [ \"$$TABLE_EXISTS\" = \"0\" ]; then
+        echo 'Fresh database detected. Importing base MIS backup...';
+        mysql -hmysql -uroot -p$${MYSQL_ROOT_PASSWORD} $${MYSQL_DATABASE} < /patches/base_backup.sql;
+      else
+        echo 'Existing database detected. Skipping base backup import.';
+      fi;
+      echo 'Applying safe schema/seed patch...';
+      mysql -hmysql -uroot -p$${MYSQL_ROOT_PASSWORD} $${MYSQL_DATABASE} < /patches/server_safe_schema_seed_patch.sql"
+    networks:
+      - mis-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mis-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      DB_DIALECT: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE:-mis_database}
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-mis_root_password}
+      ENABLE_DB_SYNC: "false"
+      JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret-in-production}
+      SESSION_SECRET: ${SESSION_SECRET:-change-this-session-secret-in-production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+    ports:
+      - "${BACKEND_PORT:-5001}:5001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"require('http').get('http://127.0.0.1:5001/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - mis-network
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    container_name: mis-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    networks:
+      - mis-network
+
+networks:
+  mis-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local

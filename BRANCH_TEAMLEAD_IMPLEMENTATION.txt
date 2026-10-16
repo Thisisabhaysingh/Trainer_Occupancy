@@ -1,0 +1,261 @@
+=====================================================
+BRANCH-WISE CATEGORIZATION & TEAM LEAD IMPLEMENTATION
+=====================================================
+
+OVERVIEW:
+---------
+This implementation adds branch-wise categorization to the MIS system with Team Lead (TL) role support.
+Each branch can have multiple departments, each department has one Team Lead, and managers are branch-specific.
+
+KEY FEATURES:
+-------------
+1. Team Lead (TL) Role: New role between manager and employee
+2. Branch-wise Organization: Departments are organized by branches
+3. Separate TL Dashboard: Team leads have their own dashboard to manage their department
+4. Branch-specific Managers: Managers only manage employees in their branch
+5. Department-specific Team Leads: Each department has one team lead
+
+DATABASE CHANGES:
+-----------------
+
+1. Users Table:
+   - Added 'teamlead' to role ENUM
+   - Added branchId column (INT, nullable)
+   - Added foreign key constraint to Branches table
+
+2. Departments Table:
+   - Added branchId column (INT, nullable)
+   - Added teamLeadId column (VARCHAR, nullable)
+   - Added foreign key constraints for branchId and teamLeadId
+
+3. Branches Table:
+   - Already exists with managerId field
+   - Manages branch-level operations
+
+BACKEND CHANGES:
+----------------
+
+1. Models Updated:
+   - models/User.js: Added 'teamlead' role and branchId field
+   - models/Department.js: Added branchId and teamLeadId fields
+   - models/index.js: Updated associations for branch-department-user relationships
+
+2. Routes Created/Updated:
+   - routes/teamlead.js: NEW - Team lead specific routes
+     * GET /api/teamlead/analytics - Department analytics
+     * GET /api/teamlead/employees - Employees in TL's department
+     * GET /api/teamlead/activities - Activities in TL's department
+     * POST /api/teamlead/activities/assign - Assign activities to employees
+   
+   - routes/auth.js: Updated to include branchId in login response
+   - routes/employees.js: Updated to support creating teamlead users with branchId
+   - server.js: Added teamlead routes
+
+3. Middleware:
+   - middleware/auth.js: Already supports role-based access control
+
+FRONTEND CHANGES:
+-----------------
+
+1. New Components:
+   - pages/TeamLeadDashboard.jsx: Complete dashboard for team leads
+     * Department analytics and metrics
+     * Employee performance tracking
+     * Activity management
+     * Day-wise hours visualization
+     * Productivity trends
+
+2. Updated Components:
+   - App.jsx: Added TeamLead route (/teamlead/*)
+   - Login.jsx: Already supports role-based redirection
+
+3. Features:
+   - Separate login panel for TL (automatic redirect based on role)
+   - Department-specific analytics
+   - Employee management within department
+   - Activity assignment capabilities
+
+ROLE HIERARCHY:
+---------------
+Admin (Highest)
+  └── Manager (Branch-level)
+      └── Team Lead (Department-level)
+          └── Employee (Lowest)
+
+PERMISSIONS:
+------------
+
+Admin:
+- Full system access
+- Manage all branches, departments, and users
+- View all analytics
+
+Manager:
+- Manage employees in their branch only
+- View branch-level analytics
+- Create employees and team leads in their branch
+
+Team Lead:
+- Manage employees in their department only
+- View department-level analytics
+- Assign activities to employees in their department
+- Cannot create new users (only admin and manager can)
+
+Employee:
+- View and update their own activities
+- Track their own time entries
+- View their own performance
+
+MIGRATION STEPS:
+----------------
+
+1. Backup Database:
+   - Create a full backup of your production database before proceeding
+
+2. Run SQL Migration:
+   - Execute queries from DATABASE_MIGRATION_QUERIES.sql
+   - Run them in order as specified in the file
+   - Verify each step before proceeding to the next
+
+3. Update Application Code:
+   - All code changes are already implemented
+   - No additional code changes needed
+
+4. Test Locally:
+   - Create test users with 'teamlead' role
+   - Assign team leads to departments
+   - Test login and dashboard access
+   - Verify permissions and data access
+
+5. Deploy to Production:
+   - Deploy backend changes first
+   - Then deploy frontend changes
+   - Monitor logs for any errors
+
+CREATING A TEAM LEAD USER:
+---------------------------
+
+Option 1: Via API (Admin/Manager):
+POST /api/employees
+{
+  "employeeCode": "TL001",
+  "name": "John Doe",
+  "email": "john.doe@example.com",
+  "password": "securepassword",
+  "role": "teamlead",
+  "departmentId": 1,
+  "branchId": 1
+}
+
+Option 2: Direct Database Insert:
+INSERT INTO users (employeeCode, name, email, password, role, departmentId, branchId, createdAt, updatedAt)
+VALUES ('TL001', 'John Doe', 'john.doe@example.com', '$2a$10$hashedpassword', 'teamlead', 1, 1, NOW(), NOW());
+
+Then assign to department:
+UPDATE departments SET teamLeadId = 'TL001' WHERE id = 1;
+
+ASSIGNING DEPARTMENTS TO BRANCHES:
+-----------------------------------
+
+UPDATE departments SET branchId = 1 WHERE name = 'Coding';
+UPDATE departments SET branchId = 1 WHERE name = 'Mechatronics';
+UPDATE departments SET branchId = 2 WHERE name = 'Electronics';
+
+ASSIGNING MANAGERS TO BRANCHES:
+--------------------------------
+
+UPDATE users SET branchId = 1 WHERE employeeCode = 'MGR001' AND role = 'manager';
+UPDATE Branches SET managerId = 'MGR001' WHERE id = 1;
+
+TESTING CHECKLIST:
+------------------
+
+Backend:
+[ ] User model accepts 'teamlead' role
+[ ] Users can have branchId assigned
+[ ] Departments can have branchId and teamLeadId
+[ ] Team lead can login successfully
+[ ] Team lead routes return correct data
+[ ] Team lead can only access their department data
+[ ] Manager can only access their branch data
+
+Frontend:
+[ ] Team lead login redirects to /teamlead
+[ ] Team lead dashboard loads without errors
+[ ] Analytics display correctly
+[ ] Employee list shows only department employees
+[ ] Activities show only department activities
+[ ] Logout works correctly
+
+Database:
+[ ] All migrations applied successfully
+[ ] Foreign keys are properly set
+[ ] Indexes are created
+[ ] No orphaned records
+
+TROUBLESHOOTING:
+----------------
+
+Issue: "Unknown column 'branchId'" error
+Solution: Run the ALTER TABLE queries for users and departments tables
+
+Issue: "Data truncated for column 'role'" error
+Solution: Run the ALTER TABLE query to modify the role ENUM
+
+Issue: Team lead cannot login
+Solution: Verify the user has role='teamlead' and departmentId is set
+
+Issue: Team lead dashboard shows no data
+Solution: Ensure the department has activities and employees assigned
+
+Issue: Foreign key constraint fails
+Solution: Ensure referenced records exist in parent tables (Branches, users)
+
+API ENDPOINTS SUMMARY:
+----------------------
+
+Authentication:
+POST /api/auth/login - Login (all roles)
+POST /api/auth/logout - Logout (all roles)
+GET /api/auth/me - Get current user (all roles)
+
+Team Lead Specific:
+GET /api/teamlead/analytics - Get department analytics
+GET /api/teamlead/employees - Get department employees
+GET /api/teamlead/activities - Get department activities
+POST /api/teamlead/activities/assign - Assign activity to employee
+
+Employee Management:
+GET /api/employees - Get all employees (admin, manager, teamlead)
+POST /api/employees - Create employee/teamlead/manager (admin, manager, teamlead)
+GET /api/employees/:id - Get employee details
+PUT /api/employees/:id - Update employee
+DELETE /api/employees/:id - Delete employee
+
+ENVIRONMENT VARIABLES:
+----------------------
+No new environment variables required.
+Existing variables remain the same:
+- DATABASE_URL or individual DB credentials
+- JWT_SECRET
+- CORS_ORIGIN
+- PORT
+
+NOTES:
+------
+1. The branchId field is nullable to support existing data
+2. Team leads can only manage their assigned department
+3. Managers are now branch-specific (branchId field)
+4. The system maintains backward compatibility with existing data
+5. All password hashing is handled automatically by Sequelize hooks
+
+SUPPORT:
+--------
+For issues or questions, refer to:
+- DATABASE_MIGRATION_QUERIES.sql for database changes
+- routes/teamlead.js for API implementation
+- pages/TeamLeadDashboard.jsx for frontend implementation
+
+=====================================================
+END OF DOCUMENTATION
+=====================================================

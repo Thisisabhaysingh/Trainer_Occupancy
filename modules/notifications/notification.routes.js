@@ -1,0 +1,12 @@
+const express = require("express");
+const { auth } = require("../../middleware/auth");
+const asyncHandler = require("../../middleware/asyncHandler");
+const controller = require("./notification.controller");
+const router = express.Router();
+router.use(auth);
+router.get("/", asyncHandler(controller.list));
+router.put("/:id/read", asyncHandler(controller.markRead));
+router.put("/read-all/:type?", asyncHandler(controller.markAllRead));
+router.delete("/old-read", asyncHandler(controller.clearOldRead));
+router.use((error, _req, res, next) => error.statusCode ? res.status(error.statusCode).json({ success: false, error: error.message }) : next(error));
+module.exports = router;

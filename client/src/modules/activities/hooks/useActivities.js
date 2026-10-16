@@ -1,0 +1,10 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { activityApi } from '../api/activityApi';
+export const activityKeys = { all: ['activities'], list: (params) => ['activities', 'list', params || {}], mine: ['activities', 'mine'], history: (params) => ['activities', 'history', params || {}] };
+export const useActivities = (params) => useQuery({ queryKey: activityKeys.list(params), queryFn: () => activityApi.list(params) });
+export const useMyActivities = () => useQuery({ queryKey: activityKeys.mine, queryFn: activityApi.mine });
+export const useActivityHistory = (params) => useQuery({ queryKey: activityKeys.history(params), queryFn: () => activityApi.history(params) });
+const useInvalidatingMutation = (fn) => { const client = useQueryClient(); return useMutation({ mutationFn: fn, onSuccess: () => client.invalidateQueries({ queryKey: activityKeys.all }) }); };
+export const useCreateActivity = () => useInvalidatingMutation(activityApi.create);
+export const useUpdateActivity = () => useInvalidatingMutation(({ id, data }) => activityApi.update(id, data));
+export const useDeleteActivity = () => useInvalidatingMutation(activityApi.remove);

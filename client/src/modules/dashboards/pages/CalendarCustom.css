@@ -1,0 +1,384 @@
+/* Modern Calendar Styling - Reference Image Style */
+.react-calendar {
+  width: 100% !important;
+  max-width: 1200px !important;
+  border: none !important;
+  font-family: inherit !important;
+  background: transparent !important;
+  margin: 0 auto !important;
+}
+
+/* Navigation - Month/Year selector */
+.react-calendar__navigation {
+  display: flex !important;
+  height: 44px !important;
+  margin-bottom: 24px !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.react-calendar__navigation button {
+  min-width: 36px !important;
+  min-height: 36px !important;
+  background: #f5f5f5 !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #333 !important;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  transition: all 0.15s ease !important;
+  border: 1px solid #e0e0e0 !important;
+}
+
+.react-calendar__navigation__label {
+  font-weight: 600 !important;
+  font-size: 18px !important;
+  background: transparent !important;
+  border: none !important;
+  min-width: 140px !important;
+}
+
+.react-calendar__navigation button:enabled:hover {
+  background-color: #e8e8e8 !important;
+}
+
+.react-calendar__navigation button[disabled] {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Weekday headers */
+.react-calendar__month-view__weekdays {
+  text-align: center !important;
+  text-transform: uppercase !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  margin-bottom: 8px !important;
+  color: #666 !important;
+}
+
+.react-calendar__month-view__weekdays__weekday {
+  padding: 12px 4px !important;
+}
+
+.react-calendar__month-view__weekdays__weekday abbr {
+  text-decoration: none !important;
+  cursor: default !important;
+}
+
+/* Calendar grid */
+.react-calendar__month-view__days {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr) !important;
+  gap: 2px !important;
+  background: #e0e0e0 !important;
+  border: 1px solid #e0e0e0 !important;
+}
+
+/* Day tiles - Fixed height with overflow hidden */
+.react-calendar__tile {
+  padding: 4px !important;
+  position: relative !important;
+  height: 120px !important;
+  max-height: 120px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  transition: background-color 0.15s ease !important;
+  color: #333333 !important;
+  overflow: hidden !important;
+  cursor: pointer !important;
+}
+
+.react-calendar__tile:enabled:hover {
+  background-color: #f8f9fa !important;
+}
+
+.react-calendar__tile--now {
+  background-color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.react-calendar__tile--now abbr {
+  color: #1976d2 !important;
+}
+
+.react-calendar__tile--active {
+  background-color: #e3f2fd !important;
+}
+
+.react-calendar__tile--active abbr {
+  color: #1565c0 !important;
+}
+
+.react-calendar__tile:disabled {
+  background: #f5f5f5 !important;
+  color: #9e9e9e !important;
+}
+
+/* Date number styling */
+.react-calendar__tile abbr {
+  display: block !important;
+  padding: 4px 6px !important;
+  margin-bottom: 4px !important;
+  font-weight: 500 !important;
+}
+
+/* Attendance indicators - Only top colored bar, no full cell background */
+.calendar-day-full::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 4px !important;
+  background-color: #4CAF50 !important;
+}
+
+.calendar-day-half::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 4px !important;
+  background-color: #FF9800 !important;
+}
+
+.calendar-day-leave::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 4px !important;
+  background-color: #F44336 !important;
+}
+
+/* Event bars - Colored horizontal bars matching reference image */
+.calendar-event-bar {
+  width: calc(100% - 8px) !important;
+  margin: 2px 4px !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.2 !important;
+  box-sizing: border-box !important;
+}
+
+/* Full Day bar - Green like reference image */
+.calendar-event-full-day {
+  background-color: #2e7d32 !important;
+  color: #ffffff !important;
+  border-radius: 4px !important;
+}
+
+/* Half Day bar - Orange like reference image */
+.calendar-event-half-day {
+  background-color: #ed6c02 !important;
+  color: #ffffff !important;
+  border-radius: 4px !important;
+}
+
+/* Leave bar - Red like reference image */
+.calendar-event-leave {
+  background-color: #d32f2f !important;
+  color: #ffffff !important;
+  border-radius: 4px !important;
+}
+
+/* Institute session bar - Light purple */
+.calendar-event-institute {
+  background-color: #e1bee7 !important;
+  color: #4a148c !important;
+  border-left: 4px solid #7b1fa2 !important;
+  border-radius: 0 4px 4px 0 !important;
+}
+
+/* School session bar - Light teal */
+.calendar-event-school {
+  background-color: #b2ebf2 !important;
+  color: #006064 !important;
+  border-left: 4px solid #00838f !important;
+  border-radius: 0 4px 4px 0 !important;
+}
+
+.calendar-day-with-school {
+  background: #e0f7fa !important;
+  box-shadow: inset 0 0 0 2px #00838f !important;
+}
+
+.calendar-day-with-school abbr {
+  background: #00838f !important;
+  color: #ffffff !important;
+  border-radius: 999px !important;
+  min-width: 26px !important;
+  text-align: center !important;
+}
+
+.calendar-day-with-school .calendar-event-school {
+  background-color: #00838f !important;
+  color: #ffffff !important;
+  border-left-color: #005662 !important;
+}
+
+/* Generic activity bar - Light gray */
+.calendar-event-generic {
+  background-color: #f5f5f5 !important;
+  color: #424242 !important;
+  border-left: 4px solid #9e9e9e !important;
+  border-radius: 0 4px 4px 0 !important;
+}
+
+/* Ensure light mode by default - white cells */
+.react-calendar__month-view__days {
+  background: #e0e0e0 !important;
+}
+
+.react-calendar__tile {
+  background: #ffffff !important;
+  color: #333333 !important;
+}
+
+/* Dark mode support */
+.dark-mode-calendar .react-calendar__tile {
+  background: #1f2937 !important;
+  color: #f2f4f7 !important;
+}
+
+.dark-mode-calendar .react-calendar__tile:enabled:hover {
+  background-color: #374151 !important;
+}
+
+.dark-mode-calendar .react-calendar__tile--now {
+  background-color: #1f2937 !important;
+}
+
+.dark-mode-calendar .react-calendar__tile--now abbr {
+  color: #38f9d7 !important;
+}
+
+.dark-mode-calendar .react-calendar__tile--active {
+  background-color: #23272f !important;
+}
+
+.dark-mode-calendar .react-calendar__tile--active abbr {
+  color: #38f9d7 !important;
+}
+
+.dark-mode-calendar .react-calendar__month-view__days {
+  background: #111827 !important;
+  border-color: #374151 !important;
+}
+
+.dark-mode-calendar .react-calendar__navigation button {
+  background: #23272f !important;
+  color: #f2f4f7 !important;
+  border-color: #374151 !important;
+}
+
+.dark-mode-calendar .react-calendar__navigation button:enabled:hover {
+  background-color: #374151 !important;
+}
+
+.dark-mode-calendar .react-calendar__month-view__weekdays {
+  color: #9ca3af !important;
+}
+
+.dark-mode-calendar .calendar-event-generic {
+  background-color: #374151 !important;
+  color: #f2f4f7 !important;
+  border-left-color: #6b7280 !important;
+}
+
+.dark-mode-calendar .calendar-day-with-school {
+  background: #083344 !important;
+  box-shadow: inset 0 0 0 2px #22d3ee !important;
+}
+
+.dark-mode-calendar .calendar-day-with-school abbr {
+  background: #22d3ee !important;
+  color: #083344 !important;
+}
+
+.dark-mode-calendar .calendar-day-with-school .calendar-event-school {
+  background-color: #22d3ee !important;
+  color: #083344 !important;
+  border-left-color: #67e8f9 !important;
+}
+
+/* Calendar popup styling */
+.calendar-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.calendar-popup-content {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+
+.dark-mode-calendar-popup .calendar-popup-content {
+  background: #1f2937;
+  color: #f2f4f7;
+}
+
+@media (max-width: 700px) {
+  .react-calendar__navigation {
+    margin-bottom: 14px !important;
+  }
+
+  .react-calendar__navigation button {
+    min-width: 32px !important;
+    padding: 6px 8px !important;
+  }
+
+  .react-calendar__navigation__label {
+    min-width: 110px !important;
+    font-size: 15px !important;
+  }
+
+  .react-calendar__month-view__weekdays__weekday {
+    padding: 8px 2px !important;
+    font-size: 10px !important;
+  }
+
+  .react-calendar__tile {
+    height: 76px !important;
+    max-height: 76px !important;
+    padding: 2px !important;
+    font-size: 12px !important;
+  }
+
+  .calendar-event-bar {
+    margin: 1px 2px !important;
+    padding: 2px 4px !important;
+    width: calc(100% - 4px) !important;
+    font-size: 9px !important;
+  }
+}

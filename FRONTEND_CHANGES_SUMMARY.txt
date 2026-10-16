@@ -1,0 +1,166 @@
+# Frontend Changes Summary - Attendance System
+
+## ✅ Employee Dashboard Changes (COMPLETED)
+
+### Changes Made:
+1. **Replaced Clock In/Out with Attendance Selection**
+   - Removed manual time entry (Clock In/Clock Out buttons)
+   - Added 3 attendance type buttons:
+     - ✓ Full Day (8 hours) - Green gradient
+     - ⚡ Half Day (4 hours) - Orange gradient
+     - 🏖️ Leave (0 hours) - Red gradient
+
+2. **Added Attendance State Management**
+   - New state: `attendanceType` (full_day/half_day/leave)
+   - New state: `standardHours` (8/4/0)
+   - Updated `fetchClockStatus()` to get attendance data
+   - Added `handleMarkAttendance()` function
+
+3. **Updated UI Feedback**
+   - Shows selected attendance type with icon
+   - Displays standard hours
+   - "Change Attendance" button to modify selection
+   - Warning alerts based on attendance status
+
+4. **Updated Warnings**
+   - "Please mark your attendance to add activities" (if not marked)
+   - "You are on leave today" (if leave selected)
+
+### API Integration:
+- GET `/api/workday/status` - Fetches attendance type and standard hours
+- POST `/api/workday/mark-attendance` - Marks attendance with type
+
+## 🔧 Manager Dashboard Changes (TODO)
+
+### Required Changes:
+1. **Add "Add Activity" Button**
+   - Place in department activities section
+   - Opens dialog/modal for activity creation
+
+2. **Activity Creation Dialog**
+   - Fields:
+     - Title (required)
+     - Description
+     - Assign to Employee (dropdown - department employees only)
+     - Priority (low/medium/high)
+     - Status (pending/in_progress/completed)
+   - Submit button calls POST `/api/manager/activities`
+
+3. **Show Employee Attendance Status**
+   - In employee list, show attendance badge:
+     - 🟢 Full Day
+     - 🟡 Half Day
+     - 🔴 Leave
+   - Update employee cards to display attendance type
+
+4. **Update Productivity Calculations**
+   - Use `standardHours` instead of clock time
+   - Formula: (timeSpent / (standardHours * 60)) * 100
+   - Show 0% for employees on leave
+
+### API Endpoints to Use:
+- POST `/api/manager/activities` - Create activity
+- GET `/api/manager/analytics` - Get employee data (already has attendance info)
+
+## 🔧 Admin Dashboard Changes (TODO)
+
+### Required Changes:
+1. **Show Attendance Status in Employee List**
+   - Add attendance type column/badge
+   - Color-coded indicators
+
+2. **Update Reports**
+   - Include attendance type in datewise reports
+   - Show standard hours vs actual hours worked
+
+3. **Update Productivity Calculations**
+   - Use standardHours for all calculations
+   - Handle leave days (0% productivity expected)
+
+## Testing Checklist
+
+### Employee Dashboard ✅
+- [x] Attendance buttons appear correctly
+- [x] Selecting Full Day marks attendance (8h)
+- [x] Selecting Half Day marks attendance (4h)
+- [x] Selecting Leave marks attendance (0h)
+- [x] Selected attendance shows with icon and hours
+- [x] "Change Attendance" button works
+- [x] Warning shows when attendance not marked
+- [x] Info alert shows when on leave
+- [ ] Activities can only be added after marking attendance
+- [ ] Productivity calculated based on standardHours
+
+### Manager Dashboard (Pending)
+- [ ] "Add Activity" button visible
+- [ ] Activity creation dialog opens
+- [ ] Can select employee from department
+- [ ] Activity created successfully
+- [ ] Employee list shows attendance status
+- [ ] Productivity shows correctly based on attendance
+
+### Admin Dashboard (Pending)
+- [ ] Employee list shows attendance status
+- [ ] Reports include attendance data
+- [ ] Productivity calculations use standardHours
+
+## Deployment Steps
+
+1. **Test Locally**
+   ```bash
+   # Backend
+   npm run dev
+   
+   # Frontend
+   cd client
+   npm run dev
+   ```
+
+2. **Test All Attendance Types**
+   - Mark Full Day → Add activity → Check productivity
+   - Mark Half Day → Add activity → Check productivity
+   - Mark Leave → Verify no activities can be added
+
+3. **Push to Repository**
+   ```bash
+   git add .
+   git commit -m "feat: Replace clock in/out with attendance system
+   
+   - Add attendance type selection (Full Day/Half Day/Leave)
+   - Calculate productivity based on standard hours
+   - Update Employee Dashboard UI
+   - Add manager activity creation endpoint"
+   
+   git push origin master
+   ```
+
+4. **Deploy to Production**
+   ```bash
+   # On EC2
+   cd ~/MIS
+   git pull
+   npm install
+   cd client && npm install && npm run build && cd ..
+   pm2 restart mis-backend
+   ```
+
+5. **Database Migration**
+   - Sequelize will auto-add new columns (attendanceType, standardHours)
+   - Existing records default to full_day with 8 hours
+   - No manual migration needed
+
+## Next Steps
+
+1. ✅ Employee Dashboard - COMPLETED
+2. ⏳ Manager Dashboard - Add Activity button and attendance display
+3. ⏳ Admin Dashboard - Attendance status and reports
+4. ⏳ Testing - All three attendance types
+5. ⏳ Deployment - Push to production
+
+## Notes
+
+- Clock in/out functionality kept for backward compatibility
+- Old workday records automatically default to full_day
+- Leave days show 0% productivity (expected behavior)
+- Managers can only create activities for their department
+- Employees on leave cannot add activities

@@ -1,0 +1,516 @@
+diff --git a/client/src/pages/AdminDashboard.jsx b/client/src/pages/AdminDashboard.jsx
+index aa98b78..e03d656 100644
+--- a/client/src/pages/AdminDashboard.jsx
++++ b/client/src/pages/AdminDashboard.jsx
+@@ -625,7 +625,6 @@ const AddUserDialog = ({ open, onClose, departments, branches, onAdd, initialRol
+     employeeCode: '',
+     name: '',
+     email: '',
+-    password: '',
+     role: initialRole,
+     managerType: 'department', // Default to department manager
+     departmentId: '',
+@@ -654,7 +653,6 @@ const AddUserDialog = ({ open, onClose, departments, branches, onAdd, initialRol
+         employeeCode: '',
+         name: '',
+         email: '',
+-        password: '',
+         role: initialRole,
+         managerType: 'department',
+         departmentId: '',
+@@ -887,32 +885,9 @@ const AddUserDialog = ({ open, onClose, departments, branches, onAdd, initialRol
+             </FormControl>
+           )}
+ 
+-          <TextField
+-            fullWidth
+-            label="Password"
+-            name="password"
+-            type="password"
+-            required
+-            value={formData.password}
+-            onChange={e => setFormData({ ...formData, password: e.target.value })}
+-            sx={{
+-              mb: 2,
+-              '& .MuiOutlinedInput-root': {
+-                '& fieldset': {
+-                  borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+-                },
+-                '&:hover fieldset': {
+-                  borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+-                },
+-              },
+-              '& .MuiInputLabel-root': {
+-                color: theme.palette.mode === 'dark' ? '#888' : 'inherit',
+-              },
+-              '& .MuiOutlinedInput-input': {
+-                color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+-              }
+-            }}
+-          />
++          <Alert severity="info" sx={{ mb: 2 }}>
++            Default password will be password123. A welcome email will ask the user to change it before using MIS.
++          </Alert>
+           {error && (
+             <Alert severity="error" sx={{ mb: 2 }}>
+               {error}
+@@ -1830,12 +1805,7 @@ const AdminDashboard = () => {
+     // Sort departments alphabetically by name
+     setDepartments(deptsRes.data.sort((a, b) => a.name.localeCompare(b.name)))
+     // Sort employees alphabetically by name
+-    setEmployees(empsRes.data.map(emp => ({
+-      ...emp,
+-      _id: emp.employeeCode || emp._id || emp.id, // normalize id for UI consistency
+-      initials: emp.name.split(' ').map(n => n[0]).join('').toUpperCase(),
+-      department: emp.department?.name || 'Unknown',
+-    })).sort((a, b) => a.name.localeCompare(b.name)))
++    setEmployees(empsRes.data.map(emp => normalizeEmployeeForAdmin(emp, deptsRes.data)).sort((a, b) => a.name.localeCompare(b.name)))
+     // Use server-calculated weekly data instead of processing all activities client-side
+     setWeeklyData(weeklyRes.data)
+     setLoading(false)
+@@ -1851,6 +1821,16 @@ const AdminDashboard = () => {
+   };
+ 
+   const teamLeads = useMemo(() => employees.filter(emp => emp.role === 'teamlead'), [employees])
++  const normalizeEmployeeForAdmin = (employee, departmentList = departments) => {
++    const matchedDepartment = departmentList.find(dept => String(dept.id ?? dept._id) === String(employee.departmentId || ''))
++    const departmentName = employee.department?.name || employee.departmentName || matchedDepartment?.name || (typeof employee.department === 'string' ? employee.department : '') || 'Unknown'
++    return {
++      ...employee,
++      _id: employee.employeeCode || employee._id || employee.id,
++      initials: employee.name?.split(' ').map(n => n[0]).join('').toUpperCase() || '',
++      department: departmentName,
++    }
++  }
+   const teamLeadsByDepartment = useMemo(() => {
+     return departments.reduce((map, dept) => {
+       map[dept.id] = teamLeads.filter(lead => String(lead.departmentId) === String(dept.id))
+@@ -2032,13 +2012,7 @@ const AdminDashboard = () => {
+   }, [expandedEmployee, employees, employeeAnalytics])
+ 
+   const handleAddUser = (newUser) => {
+-    // Normalize shape like other employees in state
+-    const normalized = {
+-      ...newUser,
+-      _id: newUser.employeeCode || newUser._id || newUser.id, // normalize id for UI consistency
+-      initials: newUser.name?.split(' ').map(n => n[0]).join('').toUpperCase() || '',
+-      department: newUser.department?.name || newUser.department || 'Unknown',
+-    };
++    const normalized = normalizeEmployeeForAdmin(newUser)
+     setEmployees(prev => [...prev, normalized])
+     setSnackbar({ open: true, message: 'User added successfully!', severity: 'success' })
+   };
+@@ -2305,7 +2279,7 @@ const AdminDashboard = () => {
+       // Update employees list
+       setEmployees(prev => prev.map(emp =>
+         (emp._id || emp.id) === editEmployeeData.employeeId
+-          ? { ...emp, ...response.data, _id: response.data.employeeCode || response.data._id, initials: response.data.name.split(' ').map(n => n[0]).join('').toUpperCase(), department: response.data.department?.name || 'Unknown' }
++          ? normalizeEmployeeForAdmin({ ...emp, ...response.data })
+           : emp
+       ))
+ 
+diff --git a/client/src/pages/ManagerDashboard.jsx b/client/src/pages/ManagerDashboard.jsx
+index a4f4134..96268f0 100644
+--- a/client/src/pages/ManagerDashboard.jsx
++++ b/client/src/pages/ManagerDashboard.jsx
+@@ -673,6 +673,7 @@ const CustomBarTooltip = ({ active, payload, label }) => {
+ 
+ const AddMemberDialog = ({ open, onClose, onAdd }) => {
+   const [formData, setFormData] = useState({
++    employeeCode: '',
+     name: '',
+     email: '',
+     role: 'employee'
+@@ -686,11 +687,8 @@ const AddMemberDialog = ({ open, onClose, onAdd }) => {
+     setLoading(true);
+ 
+     try {
+-      const response = await axios.post(`${apiBaseUrl}/api/manager/employees`, 
+-        {
+-          ...formData,
+-          password: formData.name.toLowerCase().replace(/\s+/g, '')
+-        }, 
++      const response = await axios.post(`${apiBaseUrl}/api/manager/employees`,
++        formData,
+         { 
+           withCredentials: true 
+         }
+@@ -698,7 +696,7 @@ const AddMemberDialog = ({ open, onClose, onAdd }) => {
+ 
+       onAdd(response.data);
+       onClose();
+-      setFormData({ name: '', email: '', role: 'employee' });
++      setFormData({ employeeCode: '', name: '', email: '', role: 'employee' });
+     } catch (err) {
+       setError(err.response?.data?.message || 'Failed to add employee');
+     } finally {
+@@ -712,7 +710,19 @@ const AddMemberDialog = ({ open, onClose, onAdd }) => {
+       <form onSubmit={handleSubmit}>
+         <DialogContent>
+           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
++          <Alert severity="info" sx={{ mb: 2 }}>
++            Default password will be password123. A welcome email will ask the user to change it before using MIS.
++          </Alert>
+           <Grid container spacing={2}>
++            <Grid item xs={12}>
++              <TextField
++                fullWidth
++                label="Employee Code"
++                value={formData.employeeCode}
++                onChange={(e) => setFormData({ ...formData, employeeCode: e.target.value })}
++                required
++              />
++            </Grid>
+             <Grid item xs={12}>
+               <TextField
+                 fullWidth
+diff --git a/middleware/auth.js b/middleware/auth.js
+index a1278d0..e505ef5 100644
+--- a/middleware/auth.js
++++ b/middleware/auth.js
+@@ -4,9 +4,9 @@ const User = require("../models/User"); // Sequelize User model
+ const auth = async (req, res, next) => {
+   try {
+     // Read token from cookie
+-    const token = req.cookies.token;
++    const token = req.cookies?.token;
+     if (!token) {
+-      throw new Error();
++      return res.status(401).json({ error: "Please authenticate." });
+     }
+ 
+     // Verify token
+@@ -16,14 +16,14 @@ const auth = async (req, res, next) => {
+     const user = await User.findByPk(decoded.employeeCode);
+ 
+     if (!user) {
+-      throw new Error();
++      return res.status(401).json({ error: "Please authenticate." });
+     }
+ 
+     req.user = user;
+ 
+     next();
+   } catch (error) {
+-    console.error("Auth error:", error.message);
++    console.error("Auth error:", error.message || "Invalid authentication token");
+     res.status(401).json({ error: "Please authenticate." });
+   }
+ };
+diff --git a/routes/employees.js b/routes/employees.js
+index be9fecd..326c816 100644
+--- a/routes/employees.js
++++ b/routes/employees.js
+@@ -4,6 +4,9 @@ const router = express.Router();
+ const { User, Department, Branch, Employee, Activity, Workday } = require('../models');
+ const { auth, checkRole } = require('../middleware/auth');
+ const { Op } = require('sequelize');
++const { sendWelcomeEmail, sendProfileUpdateEmail } = require('../services/emailService');
++
++const DEFAULT_NEW_USER_PASSWORD = 'password123';
+ 
+ // Helper function to ensure timeEntries is always an array
+ const getTimeEntries = (activity) => {
+@@ -108,7 +111,7 @@ router.post('/', auth, checkRole(['manager', 'admin', 'teamlead']), async (req,
+     }
+     if (!employeeCode) return res.status(400).json({ error: 'Employee code is required' });
+     if (!departmentId) return res.status(400).json({ error: 'Department is required' });
+-    if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' });
++    if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
+ 
+     // Validate managerType for manager role
+     if (role === 'manager') {
+@@ -135,13 +138,15 @@ router.post('/', auth, checkRole(['manager', 'admin', 'teamlead']), async (req,
+       }
+     }
+ 
+-    const existingUser = await User.findOne({ where: { email } });
++    const normalizedEmail = email.trim().toLowerCase();
++    const existingUser = await User.findOne({ where: { email: normalizedEmail } });
+     if (existingUser) return res.status(400).json({ error: 'Email already exists' });
+ 
+     const existingCode = await User.findByPk(employeeCode);
+     if (existingCode) return res.status(400).json({ error: 'Employee code already exists' });
+ 
+-    const userData = { employeeCode, name, email, password, role, departmentId };
++    const initialPassword = DEFAULT_NEW_USER_PASSWORD;
++    const userData = { employeeCode, name, email: normalizedEmail, password: initialPassword, role, departmentId };
+     if (branchId) {
+       userData.branchId = branchId;
+     }
+@@ -161,14 +166,30 @@ router.post('/', auth, checkRole(['manager', 'admin', 'teamlead']), async (req,
+ 
+     const user = await User.create(userData);
+ 
+-    res.status(201).json({
+-      employeeCode: user.employeeCode,
+-      name: user.name,
+-      email: user.email,
+-      role: user.role,
+-      departmentId: user.departmentId,
+-      branchId: user.branchId
++    try {
++      const [department, branch] = await Promise.all([
++        departmentId ? Department.findByPk(departmentId) : null,
++        branchId ? Branch.findByPk(branchId) : null,
++      ]);
++      await sendWelcomeEmail({
++        user,
++        department,
++        branch,
++        defaultPassword: initialPassword,
++      });
++    } catch (mailError) {
++      console.error('Welcome email failed:', mailError);
++    }
++
++    const createdUser = await User.findByPk(user.employeeCode, {
++      include: [
++        { model: Department, as: 'department', attributes: ['id', 'name', 'location'], required: false },
++        { model: Branch, as: 'branch', attributes: ['id', 'name', 'location'], required: false }
++      ],
++      attributes: { exclude: ['password'] }
+     });
++
++    res.status(201).json(createdUser);
+   } catch (error) {
+     console.error("Error creating user:", error);
+     res.status(500).json({ error: 'Server error' });
+@@ -328,11 +349,23 @@ router.put('/:employeeId', auth, checkRole(['admin', 'manager']), async (req, re
+ 
+     console.log(`Found employee: ${employee.employeeCode} (${employee.name})`);
+ 
++    const normalizedEmail = email ? email.trim().toLowerCase() : '';
++    const emailChanged = normalizedEmail && normalizedEmail !== String(employee.email || '').trim().toLowerCase();
++    const departmentChanged = departmentId !== undefined && String(departmentId) !== String(employee.departmentId || '');
++    const branchChanged = branchId !== undefined && String(branchId || '') !== String(employee.branchId || '');
++    const roleChanged = role && role !== employee.role;
++    const updateEmailChanges = [];
++    if (emailChanged) updateEmailChanges.push('Email');
++    if (departmentChanged) updateEmailChanges.push('Department');
++    if (branchChanged) updateEmailChanges.push('Branch');
++    if (roleChanged) updateEmailChanges.push('Role');
++    const shouldSendProfileUpdateEmail = updateEmailChanges.length > 0;
++
+     // Check if email is being changed and if it already exists
+-    if (email && email !== employee.email) {
+-      const existingUser = await User.findOne({ where: { email } });
++    if (emailChanged) {
++      const existingUser = await User.findOne({ where: { email: normalizedEmail } });
+       if (existingUser) {
+-        console.log(`Email already exists: ${email}`);
++        console.log(`Email already exists: ${normalizedEmail}`);
+         return res.status(400).json({ error: 'Email already exists' });
+       }
+     }
+@@ -419,7 +452,7 @@ router.put('/:employeeId', auth, checkRole(['admin', 'manager']), async (req, re
+ 
+     // Update fields
+     if (name) employee.name = name;
+-    if (email) employee.email = email;
++    if (normalizedEmail) employee.email = normalizedEmail;
+     if (departmentId) employee.departmentId = departmentId;
+     if (branchId) employee.branchId = branchId;
+     if (role && ['employee', 'teamlead', 'manager'].includes(role)) employee.role = role;
+@@ -430,7 +463,6 @@ router.put('/:employeeId', auth, checkRole(['admin', 'manager']), async (req, re
+     if (requestedRole !== 'employee') {
+       employee.teamLeadId = null;
+     }
+-
+     await employee.save();
+     console.log(`Employee updated successfully: ${employee.employeeCode}`);
+ 
+@@ -442,6 +474,23 @@ router.put('/:employeeId', auth, checkRole(['admin', 'manager']), async (req, re
+       attributes: { exclude: ['password'] }
+     });
+ 
++    if (shouldSendProfileUpdateEmail) {
++      try {
++        const [department, branch] = await Promise.all([
++          updatedEmployee.departmentId ? Department.findByPk(updatedEmployee.departmentId) : null,
++          updatedEmployee.branchId ? Branch.findByPk(updatedEmployee.branchId) : null,
++        ]);
++        await sendProfileUpdateEmail({
++          user: updatedEmployee,
++          department,
++          branch,
++          changes: updateEmailChanges,
++        });
++      } catch (mailError) {
++        console.error('Profile update email failed after employee profile update:', mailError);
++      }
++    }
++
+     res.json(updatedEmployee);
+   } catch (error) {
+     console.error("Error updating employee:", error);
+diff --git a/routes/manager.js b/routes/manager.js
+index be1dc2e..2639987 100644
+--- a/routes/manager.js
++++ b/routes/manager.js
+@@ -4,6 +4,9 @@ const ExcelJS = require('exceljs');
+ const { auth, checkRole } = require('../middleware/auth');
+ const { Op } = require('sequelize');
+ const { User, Department, Workday, Activity, Holiday, Branch } = require('../models');
++const { sendWelcomeEmail } = require('../services/emailService');
++
++const DEFAULT_NEW_USER_PASSWORD = 'password123';
+ 
+ // Helper function to ensure timeEntries is always an array
+ const getTimeEntries = (activity) => {
+@@ -1459,25 +1462,48 @@ router.get('/employee/:employeeId/activities-by-date', auth, checkRole(['manager
+ // Add new employee to manager's department
+ router.post('/employees', auth, checkRole(['manager','admin']), async (req, res) => {
+   try {
+-    const { name, email } = req.body;
+-    if (!name || !email) {
+-      return res.status(400).json({ message: 'Name and email are required.' });
++    const { employeeCode, name, email } = req.body;
++    if (!employeeCode || !name || !email) {
++      return res.status(400).json({ message: 'Employee code, name, and email are required.' });
+     }
+-    // Always set role to 'employee' and password to name (lowercased, no spaces)
+-    const password = name.toLowerCase().replace(/\s+/g, '');
++    // Manager-created team members use the standard default password.
++    const password = DEFAULT_NEW_USER_PASSWORD;
+     const departmentId = req.user.departmentId;
++    const branchId = req.user.branchId || null;
+     // Check for duplicate email
+     const existing = await User.findOne({ where: { email: email.trim().toLowerCase() } });
+     if (existing) {
+       return res.status(400).json({ message: 'Email already exists.' });
+     }
++    const existingCode = await User.findByPk(employeeCode);
++    if (existingCode) {
++      return res.status(400).json({ message: 'Employee code already exists.' });
++    }
+     const newUser = await User.create({
++      employeeCode,
+       name,
+       email: email.trim().toLowerCase(),
+       password,
+       role: 'employee',
+-      departmentId
++      departmentId,
++      branchId
+     });
++
++    try {
++      const [department, branch] = await Promise.all([
++        departmentId ? Department.findByPk(departmentId) : null,
++        branchId ? Branch.findByPk(branchId) : null,
++      ]);
++      await sendWelcomeEmail({
++        user: newUser,
++        department,
++        branch,
++        defaultPassword: password,
++      });
++    } catch (mailError) {
++      console.error('Welcome email failed:', mailError);
++    }
++
+     const json = newUser.toJSON();
+     delete json.password;
+     res.status(201).json(json);
+diff --git a/services/emailService.js b/services/emailService.js
+index f2b0daa..765f6eb 100644
+--- a/services/emailService.js
++++ b/services/emailService.js
+@@ -134,6 +134,89 @@ const sendBrandedEmail = async ({ to, subject, title, intro, bodyHtml }) => {
+   return sendMail({ to, subject, html });
+ };
+ 
++const buildDetailRows = (rows) => rows
++  .filter(([, value]) => value !== undefined && value !== null && value !== '')
++  .map(([label, value]) => `
++    <tr>
++      <td style="padding:8px 12px;border:1px solid #EAECF0;color:#667085;width:150px;">${escapeHtml(label)}</td>
++      <td style="padding:8px 12px;border:1px solid #EAECF0;color:#101828;font-weight:600;">${escapeHtml(value || 'Not set')}</td>
++    </tr>
++  `).join('');
++
++const formatRole = (role) => {
++  const labels = {
++    admin: 'Admin',
++    manager: 'Manager',
++    teamlead: 'Team Lead',
++    employee: 'Employee',
++    inventory_admin: 'Inventory Admin',
++  };
++  return labels[role] || role || 'User';
++};
++
++const sendWelcomeEmail = async ({ user, department, branch, defaultPassword = 'password123' }) => {
++  if (!user?.email) return { skipped: true, reason: 'user_has_no_email' };
++
++  const bodyHtml = `
++    <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:18px;">
++      ${buildDetailRows([
++        ['Full Name', user.name],
++        ['Email', user.email],
++        ['Employee ID', user.employeeCode],
++        ['Role', formatRole(user.role)],
++        ['Department', department?.name],
++        ['Branch', branch?.name],
++        ['Location', branch?.location || department?.location],
++        ['Default Password', defaultPassword],
++      ])}
++    </table>
++    <div style="padding:14px 16px;border:1px solid #FEDF89;border-radius:8px;background:#FFFAEB;color:#7A2E0E;font-size:14px;line-height:22px;">
++      Please login with the default password and change your password before using MIS.
++    </div>
++  `;
++
++  return sendBrandedEmail({
++    to: user.email,
++    subject: 'Welcome to OMOTEC MIS',
++    title: 'Welcome to OMOTEC MIS',
++    intro: `Hello ${user.name || user.employeeCode}, your MIS account has been created.`,
++    bodyHtml,
++  });
++};
++
++const sendProfileUpdateEmail = async ({ user, department, branch, changes = [] }) => {
++  if (!user?.email) return { skipped: true, reason: 'user_has_no_email' };
++
++  const changedLabels = changes.length
++    ? changes.map(change => escapeHtml(change)).join(', ')
++    : 'Your employee profile';
++
++  const bodyHtml = `
++    <p style="margin:0 0 14px;font-size:14px;line-height:22px;color:#475467;">
++      The following profile information was updated: <strong>${changedLabels}</strong>.
++    </p>
++    <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:18px;">
++      ${buildDetailRows([
++        ['Full Name', user.name],
++        ['Email', user.email],
++        ['Employee ID', user.employeeCode],
++        ['Role', formatRole(user.role)],
++        ['Department', department?.name],
++        ['Branch', branch?.name],
++        ['Location', branch?.location || department?.location],
++      ])}
++    </table>
++  `;
++
++  return sendBrandedEmail({
++    to: user.email,
++    subject: 'OMOTEC MIS profile updated',
++    title: 'MIS profile updated',
++    intro: `Hello ${user.name || user.employeeCode}, your MIS profile details have been updated.`,
++    bodyHtml,
++  });
++};
++
+ const notifyProjectEvent = async ({ user, eventType, project, item, roleLabel }) => {
+   if (!user?.email) return { skipped: true, reason: 'user_has_no_email' };
+ 
+@@ -161,4 +244,6 @@ const notifyProjectEvent = async ({ user, eventType, project, item, roleLabel })
+ module.exports = {
+   notifyProjectEvent,
+   sendBrandedEmail,
++  sendWelcomeEmail,
++  sendProfileUpdateEmail,
+ };

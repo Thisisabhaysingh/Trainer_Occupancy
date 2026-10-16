@@ -1,0 +1,383 @@
+=====================================================
+GUIDE: IMPORT EMPLOYEES FROM EXCEL WITH BRANCH DATA
+=====================================================
+
+You have employee data in Excel with a "Location" field that represents branches.
+Here are TWO methods to import this data into your database:
+
+=====================================================
+METHOD 1: USING NODE.JS SCRIPT (RECOMMENDED)
+=====================================================
+
+This method automatically reads your Excel file and imports/updates employees with branch information.
+
+STEP 1: Install Required Package
+---------------------------------
+npm install xlsx
+
+STEP 2: Prepare Your Excel File
+--------------------------------
+Make sure your Excel file has these columns (names can vary):
+- Employee Code (or Code, employeeCode)
+- Name (or name)
+- Email (or email)
+- Location (or Branch, location) ← This will be used for branch
+- Department (or department)
+- Role (or role) - optional, defaults to 'employee'
+
+Example Excel structure:
+┌──────────────┬─────────────┬──────────────────┬──────────┬─────────────┬──────────┐
+│ Employee Code│ Name        │ Email            │ Location │ Department  │ Role     │
+├──────────────┼─────────────┼──────────────────┼──────────┼─────────────┼──────────┤
+│ EMP001       │ John Doe    │ john@example.com │ Mumbai   │ Coding      │ employee │
+│ EMP002       │ Jane Smith  │ jane@example.com │ Delhi    │ Electronics │ employee │
+│ TL001        │ Bob Johnson │ bob@example.com  │ Mumbai   │ Coding      │ teamlead │
+└──────────────┴─────────────┴──────────────────┴──────────┴─────────────┴──────────┘
+
+STEP 3: Update Excel File Path
+-------------------------------
+Edit the script: scripts/importEmployeesFromExcel.js
+Change line 7 to point to your Excel file:
+const EXCEL_FILE_PATH = '../All Employees - OMOTEC (6) (1).xlsx';
+
+STEP 4: Run the Import Script
+------------------------------
+node scripts/importEmployeesFromExcel.js
+
+The script will:
+✓ Read your Excel file
+✓ Create branches automatically from Location field
+✓ Find existing departments
+✓ Create new employees or update existing ones
+✓ Assign branch and department to each employee
+✓ Show a summary of created/updated/errors
+
+STEP 5: Verify Import
+----------------------
+Check the console output for:
+- Number of employees created
+- Number of employees updated
+- Any errors
+
+=====================================================
+METHOD 2: MANUAL SQL QUERIES
+=====================================================
+
+If you prefer to do it manually with SQL, follow these steps:
+
+STEP 1: Create Branches
+------------------------
+First, create all branches from your Excel "Location" column:
+
+INSERT INTO `Branches` (`name`, `location`, `createdAt`, `updatedAt`) VALUES
+('Mumbai', 'Mumbai', NOW(), NOW()),
+('Delhi', 'Delhi', NOW(), NOW()),
+('Bangalore', 'Bangalore', NOW(), NOW()),
+('Pune', 'Pune', NOW(), NOW());
+-- Add more branches as needed
+
+STEP 2: Get Branch IDs
+-----------------------
+SELECT id, name FROM `Branches`;
+
+Note down the IDs:
+Mumbai: 1
+Delhi: 2
+Bangalore: 3
+Pune: 4
+
+STEP 3: Update Employees with Branch IDs
+-----------------------------------------
+For each employee in your Excel, run:
+
+-- Example: Update employee EMP001 to Mumbai branch (ID = 1)
+UPDATE `users` 
+SET `branchId` = 1 
+WHERE `employeeCode` = 'EMP001';
+
+-- Example: Update employee EMP002 to Delhi branch (ID = 2)
+UPDATE `users` 
+SET `branchId` = 2 
+WHERE `employeeCode` = 'EMP002';
+
+-- Or update multiple employees at once:
+UPDATE `users` 
+SET `branchId` = 1 
+WHERE `employeeCode` IN ('EMP001', 'EMP003', 'EMP005');
+
+STEP 4: Bulk Update by Location Pattern
+----------------------------------------
+If your employee codes have a pattern (e.g., MUM001 for Mumbai), you can:
+
+UPDATE `users` 
+SET `branchId` = 1 
+WHERE `employeeCode` LIKE 'MUM%';
+
+UPDATE `users` 
+SET `branchId` = 2 
+WHERE `employeeCode` LIKE 'DEL%';
+
+=====================================================
+METHOD 3: EXPORT EXCEL TO CSV AND USE SQL IMPORT
+=====================================================
+
+STEP 1: Export Excel to CSV
+----------------------------
+1. Open your Excel file
+2. File → Save As
+3. Choose "CSV (Comma delimited) (*.csv)"
+4. Save as "employees.csv"
+
+STEP 2: Create Branches First
+------------------------------
+Run the SQL from Method 2, Step 1
+
+STEP 3: Prepare CSV Import Script
+----------------------------------
+Create a file: scripts/importFromCSV.sql
+
+-- Load data from CSV
+LOAD DATA LOCAL INFILE 'employees.csv'
+INTO TABLE `temp_employees`
+FIELDS TERMINATED BY ','
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(employeeCode, name, email, location, department, role);
+
+-- Update users table with branch information
+UPDATE `users` u
+INNER JOIN `temp_employees` te ON u.employeeCode = te.employeeCode
+INNER JOIN `Branches` b ON b.name = te.location
+SET u.branchId = b.id;
+
+STEP 4: Create Temporary Table
+-------------------------------
+CREATE TEMPORARY TABLE `temp_employees` (
+  `employeeCode` VARCHAR(255),
+  `name` VARCHAR(255),
+  `email` VARCHAR(255),
+  `location` VARCHAR(255),
+  `department` VARCHAR(255),
+  `role` VARCHAR(50)
+);
+
+STEP 5: Run the Import
+-----------------------
+mysql -u your_username -p your_database < scripts/importFromCSV.sql
+
+=====================================================
+RECOMMENDED APPROACH
+=====================================================
+
+For your case, I recommend METHOD 1 (Node.js Script) because:
+
+✓ Automatic - Just run one command
+✓ Creates branches automatically
+✓ Handles errors gracefully
+✓ Shows detailed progress
+✓ Can update existing employees
+✓ No manual SQL needed
+
+=====================================================
+EXCEL COLUMN MAPPING
+=====================================================
+
+The script will look for these column names (case-insensitive):
+
+Employee Code:
+- "Employee Code"
+- "employeeCode"
+- "Code"
+
+Name:
+- "Name"
+- "name"
+
+Email:
+- "Email"
+- "email"
+
+Location (Branch):
+- "Location"
+- "location"
+- "Branch"
+
+Department:
+- "Department"
+- "department"
+
+Role:
+- "Role"
+- "role"
+(defaults to 'employee' if not provided)
+
+If your Excel has different column names, edit the script at lines 27-32.
+
+=====================================================
+TROUBLESHOOTING
+=====================================================
+
+Error: "Cannot find module 'xlsx'"
+-----------------------------------
+Solution: Run "npm install xlsx"
+
+Error: "Department not found"
+-----------------------------
+Solution: Make sure departments exist in your database first.
+Run: SELECT * FROM departments;
+Create missing departments via Admin Dashboard or SQL.
+
+Error: "Email already exists"
+-----------------------------
+Solution: The script will update existing employees instead of creating duplicates.
+
+Error: "Cannot read Excel file"
+-------------------------------
+Solution: Check the file path in the script (line 7).
+Make sure the Excel file is in the correct location.
+
+No branches created
+-------------------
+Solution: Check if the "Location" column in Excel has values.
+The script creates branches automatically from this column.
+
+=====================================================
+VERIFICATION QUERIES
+=====================================================
+
+After import, verify the data:
+
+-- Check how many employees have branches assigned
+SELECT 
+  COUNT(*) as total_employees,
+  COUNT(branchId) as employees_with_branch
+FROM users;
+
+-- See employees grouped by branch
+SELECT 
+  b.name as branch_name,
+  COUNT(u.employeeCode) as employee_count
+FROM users u
+LEFT JOIN Branches b ON u.branchId = b.id
+GROUP BY b.name;
+
+-- List all employees with their branch and department
+SELECT 
+  u.employeeCode,
+  u.name,
+  u.email,
+  d.name as department,
+  b.name as branch,
+  u.role
+FROM users u
+LEFT JOIN departments d ON u.departmentId = d.id
+LEFT JOIN Branches b ON u.branchId = b.id
+ORDER BY b.name, d.name, u.name;
+
+-- Find employees without branch assignment
+SELECT 
+  employeeCode,
+  name,
+  email
+FROM users
+WHERE branchId IS NULL;
+
+=====================================================
+EXAMPLE: COMPLETE WORKFLOW
+=====================================================
+
+1. Install xlsx package:
+   npm install xlsx
+
+2. Place your Excel file in the project root:
+   All Employees - OMOTEC (6) (1).xlsx
+
+3. Run the import script:
+   node scripts/importEmployeesFromExcel.js
+
+4. Check the output:
+   === Import Summary ===
+   Total rows processed: 50
+   Created: 10
+   Updated: 40
+   Errors: 0
+   =====================
+
+5. Verify in database:
+   SELECT b.name, COUNT(*) 
+   FROM users u 
+   JOIN Branches b ON u.branchId = b.id 
+   GROUP BY b.name;
+
+6. Test in Team Lead Dashboard:
+   - Login as team lead
+   - Go to Employees tab
+   - You should see branch information on employee cards
+
+=====================================================
+UPDATING SCRIPT FOR YOUR EXCEL COLUMNS
+=====================================================
+
+If your Excel has different column names, edit the script:
+
+Open: scripts/importEmployeesFromExcel.js
+
+Find lines 27-32 and update to match your Excel:
+
+// BEFORE (default):
+const employeeCode = row['Employee Code'] || row['employeeCode'] || row['Code'];
+const name = row['Name'] || row['name'];
+const email = row['Email'] || row['email'];
+const location = row['Location'] || row['location'] || row['Branch'];
+const departmentName = row['Department'] || row['department'];
+const role = row['Role'] || row['role'] || 'employee';
+
+// AFTER (if your columns are different):
+const employeeCode = row['Your_Column_Name_For_Code'];
+const name = row['Your_Column_Name_For_Name'];
+const email = row['Your_Column_Name_For_Email'];
+const location = row['Your_Column_Name_For_Location'];
+const departmentName = row['Your_Column_Name_For_Department'];
+const role = row['Your_Column_Name_For_Role'] || 'employee';
+
+=====================================================
+NEXT STEPS AFTER IMPORT
+=====================================================
+
+1. ✓ Verify all employees have branches assigned
+2. ✓ Update department branchId if needed:
+   UPDATE departments SET branchId = 1 WHERE name = 'Coding' AND location = 'Mumbai';
+
+3. ✓ Assign team leads to departments:
+   UPDATE departments SET teamLeadId = 'TL001' WHERE id = 1;
+
+4. ✓ Test Team Lead Dashboard:
+   - Login as team lead
+   - Check if branch information displays correctly
+   - Verify employee cards show branch names
+
+5. ✓ Test branch filtering (if implemented):
+   - Filter employees by branch
+   - Check branch-wise analytics
+
+=====================================================
+SUPPORT
+=====================================================
+
+If you encounter any issues:
+
+1. Check the console output for error messages
+2. Verify your Excel file structure matches the expected format
+3. Make sure all departments exist in the database
+4. Ensure the Excel file path is correct in the script
+5. Check database connection settings
+
+For SQL errors, check:
+- Database credentials in .env file
+- Database server is running
+- User has permission to create/update records
+
+=====================================================
+END OF GUIDE
+=====================================================

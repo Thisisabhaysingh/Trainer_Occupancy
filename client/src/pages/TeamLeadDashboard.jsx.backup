@@ -1,0 +1,398 @@
+import React, { useState, useEffect, useMemo, memo } from 'react';
+import {
+  Container, Grid, Paper, Typography, Button, Box, Avatar, CircularProgress, Alert, Snackbar, Card, CardContent, Tabs, Tab, Collapse, IconButton, Chip
+} from '@mui/material';
+import { useDispatch } from 'react-redux';
+import { logout } from '../features/auth/authSlice';
+import axios from 'axios';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
+import { useNavigate } from 'react-router-dom';
+import { useTheme } from '@mui/material/styles';
+import LogoutIcon from '@mui/icons-material/Logout';
+import PeopleIcon from '@mui/icons-material/People';
+import TrendingUp from '@mui/icons-material/TrendingUp';
+import AccessTime from '@mui/icons-material/AccessTime';
+import ArrowDropDown from '@mui/icons-material/ArrowDropDown';
+import ArrowUpward from '@mui/icons-material/ArrowUpward';
+import ArrowDownward from '@mui/icons-material/ArrowDownward';
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+const COLORS = ['#ff9800', '#2196f3', '#4caf50', '#e91e63', '#9c27b0'];
+const DEPT_COLORS = {
+  'Coding': '#2196f3',
+  'Electronics': '#4caf50',
+  'Mechatronics': '#ff9800',
+  'Robotics': '#e91e63'
+};
+
+const TeamLeadDashboard = () => {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const theme = useTheme();
+  
+  const [loading, setLoading] = useState(true);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [employees, setEmployees] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [error, setError] = useState('');
+  const [currentTab, setCurrentTab] = useState(0);
+  const [expandedEmployee, setExpandedEmployee] = useState(null);
+  const [employeeAnalytics, setEmployeeAnalytics] = useState({});
+  const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState('all');
+
+  useEffect(() => {
+    fetchAnalytics();
+    fetchEmployees();
+    fetchActivities();
+  }, []);
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${apiBaseUrl}/api/teamlead/analytics`, {
+        withCredentials: true
+      });
+      setAnalyticsData(response.data);
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching analytics:', err);
+      setError('Failed to load analytics');
+      setLoading(false);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await axios.get(`${apiBaseUrl}/api/teamlead/employees`, {
+        withCredentials: true
+      });
+      setEmployees(response.data);
+    } catch (err) {
+      console.error('Error fetching employees:', err);
+    }
+  };
+
+  const fetchActivities = async () => {
+    try {
+      const response = await axios.get(`${apiBaseUrl}/api/teamlead/activities`, {
+        withCredentials: true
+      });
+      setActivities(response.data);
+    } catch (err) {
+      console.error('Error fetching activities:', err);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await axios.post(`${apiBaseUrl}/api/auth/logout`, {}, { withCredentials: true });
+      dispatch(logout());
+      navigate('/login');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  const renderDashboard = () => {
+    if (loading) {
+      return (
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
+      );
+    }
+
+    if (!analyticsData) {
+      return <Alert severity="error">No analytics data available</Alert>;
+    }
+
+    return (
+      <Grid container spacing={3}>
+        {/* Department Summary Card */}
+        {analyticsData.departmentCards && analyticsData.departmentCards.map((dept, idx) => (
+          <Grid item xs={12} key={idx}>
+            <Card sx={{ 
+              background: theme.palette.mode === 'dark' 
+                ? 'linear-gradient(135deg, #1e3a5f 0%, #2a5298 100%)'
+                : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white'
+            }}>
+              <CardContent>
+                <Typography variant="h5" gutterBottom>{dept.name}</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2">Employees</Typography>
+                    <Typography variant="h4">{dept.employees}</Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2">Productivity</Typography>
+                    <Typography variant="h4">{dept.productivity}%</Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2">Avg Hours</Typography>
+                    <Typography variant="h4">{dept.avgHours}</Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2">Total Hours</Typography>
+                    <Typography variant="h4">{dept.totalHours}</Typography>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+
+        {/* Activity Status Distribution */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Typography variant="h6" gutterBottom>Activity Status</Typography>
+            {analyticsData.activityStatusData && (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analyticsData.activityStatusData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {analyticsData.activityStatusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* Day-wise Hours */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Typography variant="h6" gutterBottom>Day-wise Hours</Typography>
+            {analyticsData.daywiseHoursData && (
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBarChart data={analyticsData.daywiseHoursData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="day" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  {analyticsData.departmentOptions && analyticsData.departmentOptions.map((dept, idx) => (
+                    <Bar key={idx} dataKey={dept} fill={COLORS[idx % COLORS.length]} />
+                  ))}
+                </RechartsBarChart>
+              </ResponsiveContainer>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* Employee Performance */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>Employee Performance</Typography>
+            <Grid container spacing={2}>
+              {analyticsData.employeePerformance && analyticsData.employeePerformance.map((emp, idx) => (
+                <Grid item xs={12} sm={6} md={4} key={idx}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography variant="subtitle1" fontWeight="bold">{emp.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Hours: {emp.hours} | Tasks: {emp.tasks}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Productivity: {emp.productivity}%
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Paper>
+        </Grid>
+
+        {/* Productivity Trend */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>Productivity Trend</Typography>
+            {analyticsData.productivityTrendData && (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={analyticsData.productivityTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  {analyticsData.departmentOptions && analyticsData.departmentOptions.map((dept, idx) => (
+                    <Line key={idx} type="monotone" dataKey={dept} stroke={COLORS[idx % COLORS.length]} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
+    );
+  };
+
+  const renderEmployees = () => {
+    return (
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h5" gutterBottom>Team Members</Typography>
+        <Grid container spacing={2}>
+          {employees.map((emp) => (
+            <Grid item xs={12} sm={6} md={4} key={emp.employeeCode}>
+              <Card>
+                <CardContent>
+                  <Box display="flex" alignItems="center" mb={2}>
+                    <Avatar sx={{ mr: 2, bgcolor: theme.palette.primary.main }}>
+                      {emp.name.charAt(0)}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight="bold">{emp.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">{emp.email}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Code: {emp.employeeCode}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  {emp.department && (
+                    <Typography variant="body2" color="text.secondary">
+                      Department: {emp.department.name}
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Paper>
+    );
+  };
+
+  const renderActivities = () => {
+    return (
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h5" gutterBottom>Department Activities</Typography>
+        <Grid container spacing={2}>
+          {activities.map((activity) => (
+            <Grid item xs={12} key={activity.id}>
+              <Card variant="outlined">
+                <CardContent>
+                  <Box display="flex" justifyContent="space-between" alignItems="center">
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight="bold">{activity.title}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Assigned to: {activity.assignedTo?.name || 'Unassigned'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Status: {activity.status}
+                      </Typography>
+                    </Box>
+                    <Box
+                      sx={{
+                        px: 2,
+                        py: 1,
+                        borderRadius: 2,
+                        bgcolor: activity.status === 'completed' ? '#4caf50' : 
+                                 activity.status === 'in-progress' ? '#2196f3' : '#ff9800',
+                        color: 'white'
+                      }}
+                    >
+                      {activity.status}
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Paper>
+    );
+  };
+
+  return (
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: theme.palette.mode === 'dark' ? '#0a0e27' : '#f5f7fa' }}>
+      {/* Sidebar */}
+      <Box
+        sx={{
+          width: 240,
+          bgcolor: theme.palette.mode === 'dark' ? '#1a1f3a' : '#fff',
+          borderRight: `1px solid ${theme.palette.divider}`,
+          p: 2
+        }}
+      >
+        <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
+          Team Lead Panel
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Button
+            fullWidth
+            variant={currentView === 'dashboard' ? 'contained' : 'text'}
+            startIcon={<DashboardIcon />}
+            onClick={() => setCurrentView('dashboard')}
+            sx={{ justifyContent: 'flex-start' }}
+          >
+            Dashboard
+          </Button>
+          <Button
+            fullWidth
+            variant={currentView === 'employees' ? 'contained' : 'text'}
+            startIcon={<PeopleIcon />}
+            onClick={() => setCurrentView('employees')}
+            sx={{ justifyContent: 'flex-start' }}
+          >
+            Employees
+          </Button>
+          <Button
+            fullWidth
+            variant={currentView === 'activities' ? 'contained' : 'text'}
+            startIcon={<AssignmentIcon />}
+            onClick={() => setCurrentView('activities')}
+            sx={{ justifyContent: 'flex-start' }}
+          >
+            Activities
+          </Button>
+          <Button
+            fullWidth
+            variant="text"
+            startIcon={<LogoutIcon />}
+            onClick={handleLogout}
+            sx={{ justifyContent: 'flex-start', mt: 'auto', color: 'error.main' }}
+          >
+            Logout
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Main Content */}
+      <Box sx={{ flex: 1, p: 3 }}>
+        <Container maxWidth="xl">
+          <Typography variant="h4" sx={{ mb: 3, fontWeight: 'bold' }}>
+            {currentView === 'dashboard' && 'Dashboard'}
+            {currentView === 'employees' && 'Team Members'}
+            {currentView === 'activities' && 'Activities'}
+          </Typography>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+              {error}
+            </Alert>
+          )}
+
+          {currentView === 'dashboard' && renderDashboard()}
+          {currentView === 'employees' && renderEmployees()}
+          {currentView === 'activities' && renderActivities()}
+        </Container>
+      </Box>
+    </Box>
+  );
+};
+
+export default TeamLeadDashboard;
