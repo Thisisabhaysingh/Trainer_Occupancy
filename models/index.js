@@ -28,6 +28,9 @@ const TrainerLeaderboard = require("./TrainerLeaderboard");
 const { SchoolActivityMailSetting, SchoolActivityMailLog, SchoolMailContact } = require("./SchoolActivityMail");
 const SchoolCurriculumCourse = require("./SchoolCurriculumCourse");
 const SchoolCurriculumSession = require("./SchoolCurriculumSession");
+const SchoolCurriculumActivityOverride = require("./SchoolCurriculumActivityOverride");
+const { ManagerSchoolAssignment, ManagerTrainerAssignment } = require("./ManagerAssignment");
+const { SchoolAcademicSession, SchoolAcademicTerm, SchoolClass, SchoolClassCourse } = require("./SchoolManagement");
 
 const PMProject = require("./pm_projects")(sequelize, DataTypes);
 const PMProjectMember = require("./pm_project_members")(sequelize, DataTypes);
@@ -148,6 +151,13 @@ module.exports = {
   SchoolMailContact,
   SchoolCurriculumCourse,
   SchoolCurriculumSession,
+  SchoolCurriculumActivityOverride,
+  ManagerSchoolAssignment,
+  ManagerTrainerAssignment,
+  SchoolAcademicSession,
+  SchoolAcademicTerm,
+  SchoolClass,
+  SchoolClassCourse,
   Project,
   Job,
   Task,

@@ -135,11 +135,12 @@ async function main() {
     let topicCount = 0;
     for (const courseData of courses) {
       const { sessions, ...courseAttributes } = courseData;
+      // Courses are shared across schools: reuse an existing course with the same name/term/grades.
       let course = await SchoolCurriculumCourse.findOne({
-        where: { schoolId: school.id, academicYear, term: courseData.term, gradeBand: courseData.gradeBand, courseName: courseData.courseName },
+        where: { academicYear, term: courseData.term, gradeBand: courseData.gradeBand, courseName: courseData.courseName },
         transaction,
       });
-      const payload = { ...courseAttributes, schoolId: school.id, academicYear };
+      const payload = { ...courseAttributes, schoolId: course ? course.schoolId : school.id, academicYear };
       if (course) await course.update(payload, { transaction });
       else course = await SchoolCurriculumCourse.create(payload, { transaction });
 

@@ -24,6 +24,9 @@ const schoolCurriculumRoutes = require("./modules/school-curriculum/school-curri
 const trainerLeaderboardRoutes = require("./modules/trainer-leaderboard/trainer-leaderboard.routes");
 const schoolActivityMailRoutes = require("./modules/school-activity-mail/school-activity-mail.routes");
 const schoolReportRoutes = require("./modules/school-report/school-report.routes");
+const managerAssignmentRoutes = require("./modules/manager-assignments/manager-assignments.routes");
+const schoolManagementRoutes = require("./modules/school-management/school-management.routes");
+require("./services/schoolClassSync"); // keeps School Management classes in step with timetables
 const { startSchoolActivityMailScheduler } = require("./services/schoolActivityMailService");
 const projectRoutes = require("./modules/projects/projects.routes");
 const jobRoutes = require("./modules/jobs/jobs.routes");
@@ -121,6 +124,8 @@ app.use("/api/school-curriculum", schoolCurriculumRoutes);
 app.use("/api/trainer-leaderboard", trainerLeaderboardRoutes);
 app.use("/api/school-activity-mail", schoolActivityMailRoutes);
 app.use("/api/school-report", schoolReportRoutes);
+app.use("/api/manager-assignments", managerAssignmentRoutes);
+app.use("/api/school-management", schoolManagementRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/tasks", taskRoutes);

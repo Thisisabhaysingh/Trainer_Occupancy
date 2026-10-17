@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Alert, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormHelperText, IconButton, InputAdornment, InputLabel, ListItemText, MenuItem, Paper, Select, Snackbar, Stack, Tab, Tabs, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormHelperText, IconButton, InputAdornment, InputLabel, ListItemText, MenuItem, Paper, Select, Snackbar, Stack, Tab, Tabs, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material';
 import { AccessTime, Add as AddIcon, ChevronLeft, ChevronRight, DeleteOutline, EditOutlined, Event, Groups, School as SchoolIcon, Send, Search as SearchIcon } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import Calendar from 'react-calendar';
@@ -9,8 +9,14 @@ import '../../modules/dashboards/pages/CalendarCustom.css';
 import { ManagerSectionIntro } from './DashboardSectionIntro';
 import { managerSectionPanelSx } from './dashboardSectionStyles';
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+const ACTIVITY_STATUS_META = {
+  pending: { label: 'Pending', color: 'warning.main' },
+  done: { label: 'Done', color: 'success.main' },
+  not_completed: { label: 'Not completed', color: 'error.main' },
+  cancelled: { label: 'Class cancelled', color: 'text.disabled' },
+};
 const curriculumGrades = (gradeBand) => {
-  const grades = { III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8 };
+  const grades = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10, XI: 11, XII: 12 };
   const [start, end] = String(gradeBand || '').split('-').map(part => part.trim().toUpperCase());
   if (!grades[start] || !grades[end]) return [];
   return Object.entries(grades).filter(([, number]) => number >= grades[start] && number <= grades[end]).map(([roman]) => roman);
@@ -34,7 +40,17 @@ const normalizeWeekStart = value => {
 export default function TrainerSchedulingDashboard({ mode, employeeOptions = [], activityOptions = [] }) {
   const theme = useTheme();
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [schoolCatalog, setSchoolCatalog] = useState([]);
+  const [allSchoolCatalog, setSchoolCatalog] = useState([]);
+  // Admin-assigned schools/trainers for this manager (null lists = not restricted).
+  const [managerScope, setManagerScope] = useState(null);
+  useEffect(() => {
+    axios.get(`${apiBaseUrl}/api/manager-assignments/mine`, { withCredentials: true })
+      .then(response => setManagerScope(response.data))
+      .catch(() => setManagerScope(null));
+  }, []);
+  const schoolCatalog = useMemo(() => (managerScope?.schoolIds
+    ? allSchoolCatalog.filter(school => managerScope.schoolIds.includes(Number(school.id || school._id)))
+    : allSchoolCatalog), [allSchoolCatalog, managerScope]);
   const [schoolCatalogLoading, setSchoolCatalogLoading] = useState(false);
   const [calendarEmployee, setCalendarEmployee] = useState('');
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -105,6 +121,9 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
   const [curriculumBrowseTerm, setCurriculumBrowseTerm] = useState('Term 1');
   const [curriculumBrowseCourseId, setCurriculumBrowseCourseId] = useState('');
   const [curriculumDetailOpen, setCurriculumDetailOpen] = useState(false);
+  const [activityEdit, setActivityEdit] = useState(null); // { sessionId, status, remark }
+  const [activityEditSaving, setActivityEditSaving] = useState(false);
+  const [activityEditError, setActivityEditError] = useState('');
 
   const fetchSchoolCatalog = useCallback(async () => {
     setSchoolCatalogLoading(true);
@@ -136,6 +155,45 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
       setCurriculumProgressLoading(false);
     }
   }, []);
+
+  const startActivityEdit = (session, progress) => {
+    setActivityEditError('');
+    setActivityEdit({
+      sessionId: session.id,
+      status: progress?.status || 'pending',
+      remark: progress?.override?.remark ?? (progress?.notCompletedRemarks || []).map(entry => entry.remark).join('\n'),
+    });
+  };
+  const activityEditTarget = sessionId => ({ schoolId: curriculumBrowseSchoolId, className: `Grade ${curriculumBrowseClass}`, curriculumSessionId: sessionId });
+  const saveActivityEdit = async () => {
+    if (!activityEdit) return;
+    setActivityEditSaving(true);
+    try {
+      await axios.put(`${apiBaseUrl}/api/school-curriculum/activity-override`, {
+        ...activityEditTarget(activityEdit.sessionId),
+        status: activityEdit.status,
+        remark: activityEdit.remark,
+      }, { withCredentials: true });
+      setActivityEdit(null);
+      await fetchSchoolCurriculum();
+    } catch (err) {
+      setActivityEditError(err.response?.data?.error || 'Could not update this activity.');
+    } finally {
+      setActivityEditSaving(false);
+    }
+  };
+  const resetActivityEdit = async sessionId => {
+    setActivityEditSaving(true);
+    try {
+      await axios.delete(`${apiBaseUrl}/api/school-curriculum/activity-override`, { params: activityEditTarget(sessionId), withCredentials: true });
+      setActivityEdit(null);
+      await fetchSchoolCurriculum();
+    } catch (err) {
+      setActivityEditError(err.response?.data?.error || 'Could not reset this activity.');
+    } finally {
+      setActivityEditSaving(false);
+    }
+  };
 
   const fetchSchoolTimetableTemplates = useCallback(async () => {
     setSchoolTimetableLoading(true);
@@ -333,7 +391,7 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
       ? schoolCurriculum.find(course => course.sessions?.some(session => String(session.id) === String(assignment.curriculumSessionId)))
       : null;
     const defaultCurriculum = !assignment?.curriculumSessionId && assignment?.schoolId
-      ? schoolCurriculum.find(course => String(course.schoolId) === String(assignment.schoolId))
+      ? schoolCurriculum[0]
       : null;
     const chosenCurriculum = existingCurriculum || defaultCurriculum;
     const firstSession = chosenCurriculum?.sessions?.[0];
@@ -717,19 +775,31 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
     return () => controller.abort();
   }, [mode, occupancyTab, fetchSchoolSchedule]);
 
-  const trainerOptions = useMemo(() => employeeOptions.filter(employee => employee.role === 'employee'), [employeeOptions]);
+  const trainerOptions = useMemo(() => (managerScope?.trainers
+    ? managerScope.trainers.map(trainer => ({ ...trainer, role: 'employee' }))
+    : employeeOptions.filter(employee => employee.role === 'employee')), [employeeOptions, managerScope]);
   const plannerActivityOptions = activityOptions.length ? activityOptions : loadedActivityOptions;
+  // Classes from School Management, per school, so classes created there can be timetabled.
+  const [managedClassesBySchool, setManagedClassesBySchool] = useState({});
+  useEffect(() => {
+    const wanted = [...new Set([schoolForm.schoolId, setupSchoolFilterId].filter(Boolean).map(String))]
+      .filter(id => !(id in managedClassesBySchool));
+    wanted.forEach(id => {
+      axios.get(`${apiBaseUrl}/api/school-management/classes`, { params: { schoolId: id }, withCredentials: true })
+        .then(response => setManagedClassesBySchool(current => ({ ...current, [id]: (response.data || []).map(item => item.title) })))
+        .catch(() => setManagedClassesBySchool(current => ({ ...current, [id]: [] })));
+    });
+  }, [schoolForm.schoolId, setupSchoolFilterId, managedClassesBySchool]);
   const schoolClasses = useMemo(() => {
-    const courses = schoolCurriculum.filter(course => String(course.schoolId) === String(schoolForm.schoolId));
+    const courses = schoolCurriculum;
     const fromCurriculum = [...new Set(courses.flatMap(course => curriculumGrades(course.gradeBand)))].map(grade => `Grade ${grade}`);
     const existingClasses = schoolSchedule.filter(item => String(item.schoolId) === String(schoolForm.schoolId)).map(item => item.className).filter(Boolean);
-    return [...new Set([...fromCurriculum, ...existingClasses])];
-  }, [schoolCurriculum, schoolSchedule, schoolForm.schoolId]);
+    return [...new Set([...fromCurriculum, ...existingClasses, ...(managedClassesBySchool[String(schoolForm.schoolId)] || [])])];
+  }, [schoolCurriculum, schoolSchedule, schoolForm.schoolId, managedClassesBySchool]);
   const schoolFormGrade = schoolForm.className.match(/^Grade\s+([IVX]+)$/i)?.[1]?.toUpperCase() || '';
   const schoolFormCourses = useMemo(() => schoolCurriculum.filter(course =>
-    String(course.schoolId) === String(schoolForm.schoolId) &&
     (!schoolFormGrade || curriculumGrades(course.gradeBand).includes(schoolFormGrade))
-  ), [schoolCurriculum, schoolForm.schoolId, schoolFormGrade]);
+  ), [schoolCurriculum, schoolFormGrade]);
   const schoolFormTerms = [...new Set(schoolFormCourses.map(course => course.term))];
   const filteredSchoolFormCourses = schoolFormCourses.filter(course => !schoolFormTerm || course.term === schoolFormTerm);
   const schoolFormCourseOptions = filteredSchoolFormCourses.length ? filteredSchoolFormCourses : schoolFormCourses;
@@ -741,14 +811,17 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
     progress.className === schoolForm.className
   );
   const schoolFormActivityStatus = new Map((selectedSchoolFormProgress?.activityProgress || []).map(activity => [String(activity.id), activity.status]));
-  const templateSchoolCourses = schoolCurriculum.filter(course => String(course.schoolId) === String(schoolTemplateForm.schoolId));
+  const templateSchoolCourses = schoolCurriculum;
   const templateClassOptions = [...new Set(templateSchoolCourses.flatMap(course => curriculumGrades(course.gradeBand)).map(grade => `Grade ${grade}`))];
   const templateGrade = schoolTemplateForm.className.match(/^Grade\s+([IVX]+)$/i)?.[1]?.toUpperCase() || '';
   const templateGradeCourses = templateSchoolCourses.filter(course => !templateGrade || curriculumGrades(course.gradeBand).includes(templateGrade));
   const templateTerms = [...new Set(templateGradeCourses.map(course => course.term))];
   const templateCourseOptions = templateGradeCourses.filter(course => !schoolTemplateForm.term || course.term === schoolTemplateForm.term);
-  const setupSchoolCourses = schoolCurriculum.filter(course => String(course.schoolId) === String(setupSchoolFilterId));
-  const setupClassNames = [...new Set(setupSchoolCourses.flatMap(course => curriculumGrades(course.gradeBand).map(grade => `Grade ${grade}`)))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const setupSchoolCourses = schoolCurriculum;
+  const setupClassNames = [...new Set([
+    ...setupSchoolCourses.flatMap(course => curriculumGrades(course.gradeBand).map(grade => `Grade ${grade}`)),
+    ...(managedClassesBySchool[String(setupSchoolFilterId)] || []),
+  ])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const setupRows = setupClassNames.map(className => {
     const matches = schoolTimetableTemplates.filter(item => String(item.schoolId) === String(setupSchoolFilterId) && item.className === className);
     const match = matches[0] || null;
@@ -769,7 +842,7 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
     const existingTrainerIds = [...new Set(matches.map(item => String(item.trainerId)).filter(Boolean))];
     const key = `${setupSchoolFilterId}|${className}`;
     const grade = className.match(/^Grade\s+([IVX]+)$/i)?.[1]?.toUpperCase() || '';
-    const courses = setupSchoolCourses.filter(course => curriculumGrades(course.gradeBand).includes(grade));
+    const courses = setupSchoolCourses.filter(course => !grade || curriculumGrades(course.gradeBand).includes(grade));
     const course = courses.find(item => String(item.id) === String(match?.courseId)) || courses[0];
     const sessions = course?.sessions || [];
     const initialActivity = sessions[0];
@@ -796,10 +869,9 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
       : trainerOptions;
     return { key, className, match, matches, courses, terms: [...new Set(courses.map(item => item.term))], draft, selectedCourse, sessions: selectedCourse?.sessions || [], activityStatus, completedCount, pendingCount: Math.max(0, totalCount - completedCount), classTrainerOptions };
   });
-  const curriculumBrowseSchools = [...new Map(schoolCurriculum.map(course => [String(course.schoolId), { id: String(course.schoolId), name: schoolCatalog.find(school => String(school.id || school._id) === String(course.schoolId))?.name || `School ${course.schoolId}` }])).values()];
-  const curriculumBrowseGrades = [...new Set(schoolCurriculum.filter(course => String(course.schoolId) === String(curriculumBrowseSchoolId)).flatMap(course => curriculumGrades(course.gradeBand)))];
+  const curriculumBrowseSchools = useMemo(() => schoolCatalog.map(school => ({ id: String(school.id || school._id), name: school.name })), [schoolCatalog]);
+  const curriculumBrowseGrades = [...new Set(schoolCurriculum.flatMap(course => curriculumGrades(course.gradeBand)))];
   const curriculumBrowseCourses = schoolCurriculum.filter(course =>
-    String(course.schoolId) === String(curriculumBrowseSchoolId) &&
     (!curriculumBrowseClass || curriculumGrades(course.gradeBand).includes(curriculumBrowseClass)) &&
     course.term === curriculumBrowseTerm
   );
@@ -812,7 +884,7 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
   const curriculumBrowseActivityProgress = new Map((curriculumBrowseProgress?.activityProgress || []).map(activity => [String(activity.id), activity]));
   const curriculumSummaryRows = curriculumBrowseGrades.map(grade => {
     const className = `Grade ${grade}`;
-    const courses = schoolCurriculum.filter(course => String(course.schoolId) === String(curriculumBrowseSchoolId) && curriculumGrades(course.gradeBand).includes(grade));
+    const courses = schoolCurriculum.filter(course => curriculumGrades(course.gradeBand).includes(grade));
     const courseProgress = courses.map(course => curriculumProgress.find(progress => String(progress.courseId) === String(course.id) && String(progress.schoolId) === String(curriculumBrowseSchoolId) && progress.className === className)
       || curriculumProgress.find(progress => String(progress.courseId) === String(course.id) && String(progress.schoolId) === String(curriculumBrowseSchoolId) && !progress.className));
     const totalActivities = courses.reduce((total, course) => total + (course.sessions?.length || 0), 0);
@@ -830,7 +902,6 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
     };
   });
   const curriculumBrowseTerms = [...new Set(schoolCurriculum.filter(course =>
-    String(course.schoolId) === String(curriculumBrowseSchoolId) &&
     (!curriculumBrowseClass || curriculumGrades(course.gradeBand).includes(curriculumBrowseClass))
   ).map(course => course.term))];
   useEffect(() => {
@@ -1209,7 +1280,7 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
                             <InputLabel id="school-assignment-class-label">Class / grade</InputLabel>
                             <Select labelId="school-assignment-class-label" label="Class / grade" value={schoolForm.className} onChange={event => {
                               const grade = event.target.value.match(/^Grade\s+([IVX]+)$/i)?.[1]?.toUpperCase() || '';
-                              const matchingCourses = schoolCurriculum.filter(course => String(course.schoolId) === String(schoolForm.schoolId) && (!grade || curriculumGrades(course.gradeBand).includes(grade)));
+                              const matchingCourses = schoolCurriculum.filter(course => (!grade || curriculumGrades(course.gradeBand).includes(grade)));
                               const firstCourse = matchingCourses.find(course => course.term === 'Term 1') || matchingCourses[0];
                               setSchoolForm(current => ({ ...current, className: event.target.value, curriculumCourseId: firstCourse ? String(firstCourse.id) : '', curriculumSessionId: firstCourse?.sessions?.[0] ? String(firstCourse.sessions[0].id) : '' }));
                               setSchoolFormTerm(firstCourse?.term || 'Term 1');
@@ -1413,7 +1484,7 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
                           </TableHead>
                           <TableBody>
                             {curriculumSummaryRows.map(row => <TableRow key={row.className} hover onClick={() => {
-                              const courses = schoolCurriculum.filter(course => String(course.schoolId) === String(curriculumBrowseSchoolId) && curriculumGrades(course.gradeBand).includes(row.grade));
+                              const courses = schoolCurriculum.filter(course => curriculumGrades(course.gradeBand).includes(row.grade));
                               const firstCourse = courses.find(course => course.term === 'Term 1') || courses[0];
                               setCurriculumBrowseClass(row.grade);
                               setCurriculumBrowseTerm(firstCourse?.term || 'Term 1');
@@ -1437,15 +1508,16 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
                     </>
                   )}
                 </Paper>
-                <Dialog open={curriculumDetailOpen} onClose={() => setCurriculumDetailOpen(false)} maxWidth="md" fullWidth>
+                <Dialog open={curriculumDetailOpen} onClose={() => { setCurriculumDetailOpen(false); setActivityEdit(null); }} maxWidth="lg" fullWidth>
                   <DialogTitle>{curriculumBrowseSchools.find(school => school.id === curriculumBrowseSchoolId)?.name || 'School'} · Grade {curriculumBrowseClass} activity details</DialogTitle>
                   <DialogContent>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Choose a term and course to review each activity’s completion status.</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Choose a term and course to review each activity’s completion status. An activity is complete when its status is Done; until then it is scheduled again at the next class. Use Edit to correct the status or remark for this class.</Typography>
+                    {activityEditError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setActivityEditError('')}>{activityEditError}</Alert>}
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 2fr' }, gap: 1.5, mb: 2 }}>
                       <FormControl size="small" fullWidth disabled={!curriculumBrowseTerms.length}>
                         <InputLabel id="curriculum-detail-term-label">Term</InputLabel>
                         <Select labelId="curriculum-detail-term-label" label="Term" value={curriculumBrowseTerm} onChange={event => {
-                          const nextCourse = schoolCurriculum.find(course => String(course.schoolId) === String(curriculumBrowseSchoolId) && curriculumGrades(course.gradeBand).includes(curriculumBrowseClass) && course.term === event.target.value);
+                          const nextCourse = schoolCurriculum.find(course => curriculumGrades(course.gradeBand).includes(curriculumBrowseClass) && course.term === event.target.value);
                           setCurriculumBrowseTerm(event.target.value);
                           setCurriculumBrowseCourseId(nextCourse ? String(nextCourse.id) : '');
                         }}>
@@ -1460,34 +1532,65 @@ export default function TrainerSchedulingDashboard({ mode, employeeOptions = [],
                       </FormControl>
                     </Box>
                     {curriculumBrowseCourse && <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: 1.5, overflowX: 'auto' }}>
-                      <Table size="small" sx={{ minWidth: 640 }}>
+                      <Table size="small" sx={{ minWidth: 820 }}>
                         <TableHead><TableRow sx={{ bgcolor: 'action.hover' }}>
                           <TableCell sx={{ fontWeight: 700 }}>Activity</TableCell>
-                          <TableCell align="center" sx={{ fontWeight: 700 }}>Scheduled</TableCell>
-                          <TableCell align="center" sx={{ fontWeight: 700 }}>Completed</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 700 }}><Tooltip title="How many times this activity has been scheduled for the class. It repeats until it is marked Done."><span>Scheduled</span></Tooltip></TableCell>
                           <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
                           <TableCell sx={{ fontWeight: 700 }}>Trainer remarks</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>Action</TableCell>
                         </TableRow></TableHead>
                         <TableBody>
                           {(curriculumBrowseCourse.sessions || []).map(session => {
                             const progress = curriculumBrowseActivityProgress.get(String(session.id));
-                            const done = progress?.status === 'done';
+                            const status = progress?.status || 'pending';
+                            const statusMeta = ACTIVITY_STATUS_META[status] || ACTIVITY_STATUS_META.pending;
+                            const editing = activityEdit?.sessionId === session.id;
+                            const override = progress?.override;
+                            const activityCell = <TableCell>
+                              <Typography variant="body2" fontWeight={600}>{session.position}. {session.title}</Typography>
+                              {session.topic && <Typography variant="caption" color="text.secondary">{session.topic}</Typography>}
+                            </TableCell>;
+                            if (editing) {
+                              const updateEdit = patch => setActivityEdit(current => ({ ...current, ...patch }));
+                              return <TableRow key={session.id} sx={{ bgcolor: 'action.selected' }}>
+                                {activityCell}
+                                <TableCell align="center">{progress?.scheduledCount || 0}</TableCell>
+                                <TableCell>
+                                  <Select size="small" value={activityEdit.status} onChange={event => updateEdit({ status: event.target.value })} sx={{ minWidth: 150 }}>
+                                    {Object.entries(ACTIVITY_STATUS_META).map(([value, meta]) => <MenuItem key={value} value={value}>{meta.label}</MenuItem>)}
+                                  </Select>
+                                </TableCell>
+                                <TableCell><TextField size="small" multiline maxRows={4} placeholder="Remark" value={activityEdit.remark} onChange={event => updateEdit({ remark: event.target.value })} inputProps={{ maxLength: 2000 }} sx={{ minWidth: 200 }} /></TableCell>
+                                <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                  <Button size="small" variant="contained" onClick={saveActivityEdit} disabled={activityEditSaving}>{activityEditSaving ? 'Saving…' : 'Save'}</Button>
+                                  <Button size="small" onClick={() => setActivityEdit(null)} disabled={activityEditSaving}>Cancel</Button>
+                                </TableCell>
+                              </TableRow>;
+                            }
                             return <TableRow key={session.id}>
-                              <TableCell>
-                                <Typography variant="body2" fontWeight={600}>{session.position}. {session.title}</Typography>
-                                {session.topic && <Typography variant="caption" color="text.secondary">{session.topic}</Typography>}
-                              </TableCell>
+                              {activityCell}
                               <TableCell align="center">{progress?.scheduledCount || 0}{progress?.attemptedCount > 0 && <Typography variant="caption" color="text.secondary" display="block">{progress.attemptedCount} held{progress.notCompletedCount ? ` · ${progress.notCompletedCount} incomplete` : ''}</Typography>}</TableCell>
-                              <TableCell align="center">{progress?.completedCount || 0}</TableCell>
-                              <TableCell><Typography variant="body2" fontWeight={700} color={done ? 'success.main' : 'warning.main'}>{done ? 'Done' : 'Pending'}</Typography></TableCell>
-                              <TableCell>{(progress?.notCompletedRemarks || []).length ? progress.notCompletedRemarks.map((entry, index) => <Typography key={`${entry.date}-${index}`} variant="caption" display="block" sx={{ maxWidth: 260, whiteSpace: 'normal' }}>{entry.date}: {entry.remark}</Typography>) : <Typography variant="caption" color="text.secondary">—</Typography>}</TableCell>
+                              <TableCell>
+                                <Typography variant="body2" fontWeight={700} color={statusMeta.color}>{statusMeta.label}</Typography>
+                                {override && <Tooltip title={`Edited by ${override.updatedByName || override.updatedBy} on ${new Date(override.updatedAt).toLocaleString()}. Trainer reported: ${(ACTIVITY_STATUS_META[progress.trainerValues?.status] || ACTIVITY_STATUS_META.pending).label}.`}><Chip size="small" label="Edited by manager" variant="outlined" sx={{ mt: 0.5, height: 20, fontSize: 10 }} /></Tooltip>}
+                              </TableCell>
+                              <TableCell>
+                                {override
+                                  ? (override.remark ? <Typography variant="caption" display="block" sx={{ maxWidth: 260, whiteSpace: 'pre-wrap' }}>{override.remark}</Typography> : <Typography variant="caption" color="text.secondary">—</Typography>)
+                                  : (progress?.notCompletedRemarks || []).length ? progress.notCompletedRemarks.map((entry, index) => <Typography key={`${entry.date}-${index}`} variant="caption" display="block" sx={{ maxWidth: 260, whiteSpace: 'normal' }}>{entry.date}{entry.cancelled ? ' (cancelled)' : ''}: {entry.remark}</Typography>) : <Typography variant="caption" color="text.secondary">—</Typography>}
+                              </TableCell>
+                              <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                <Tooltip title="Edit status, counts and remark"><span><IconButton size="small" onClick={() => startActivityEdit(session, progress)} disabled={Boolean(activityEdit) || activityEditSaving || !curriculumBrowseClass}><EditOutlined fontSize="small" /></IconButton></span></Tooltip>
+                                {override && <Button size="small" onClick={() => resetActivityEdit(session.id)} disabled={activityEditSaving}>Reset</Button>}
+                              </TableCell>
                             </TableRow>;
                           })}
                         </TableBody>
                       </Table>
                     </TableContainer>}
                   </DialogContent>
-                  <DialogActions><Button onClick={() => setCurriculumDetailOpen(false)}>Close</Button></DialogActions>
+                  <DialogActions><Button onClick={() => { setCurriculumDetailOpen(false); setActivityEdit(null); }}>Close</Button></DialogActions>
                 </Dialog>
               </Box>
             )}

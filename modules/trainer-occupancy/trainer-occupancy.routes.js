@@ -4,6 +4,7 @@ const { TrainerOccupancy, TrainerActivityAssignment, TrainerSchoolAssignment, Tr
 const { auth, checkRole } = require('../../middleware/auth');
 const { seniorTrainerScope, scopeWhere } = require('../../middleware/seniorManagementScope');
 const { Op } = require('sequelize');
+const { loadOverrides, overrideKey } = require('../../services/curriculumOverrides');
 
 const isDateKey = value => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
@@ -11,13 +12,9 @@ const isDateKey = value => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
 
-const getManagedTrainerCodes = async (user) => {
-  if (user.role === 'admin') return null;
-  const scope = scopeWhere(user);
-  if (!scope) return [];
-  const trainers = await User.findAll({ where: { ...scope, role: 'employee' }, attributes: ['employeeCode'] });
-  return trainers.map(trainer => trainer.employeeCode);
-};
+// Admin-assigned trainers (or the manager's branch/department) and assigned schools.
+const { getManagedTrainerCodes, assertSchoolAccess } = require('../../services/managerScope');
+const scopeError = (res, error) => (error.status === 403 ? res.status(403).json({ error: error.message }) : null);
 
 const getWeekDates = weekStart => Array.from({ length: 7 }, (_, index) => {
   const date = new Date(`${weekStart}T00:00:00Z`);
@@ -43,7 +40,14 @@ const findTimetableTemplateConflict = ({ trainerId, dayOfWeek, startTime, endTim
 const activityForTemplateWeek = async (template, sessions, weekStart) => {
   const initialIndex = Math.max(0, sessions.findIndex(session => Number(session.position) === Number(template.startActivityPosition || 1)));
   let activityIndex = initialIndex;
-  if (!isDateKey(weekStart) || weekStart <= template.startWeek) return sessions[activityIndex] || null;
+  // Manager corrections: "done" skips the activity, any other status keeps it open.
+  const overrides = await loadOverrides([template]);
+  const overrideFor = session => session && overrides.get(overrideKey(template.schoolId, template.className, session.id));
+  const skipManagerDone = () => {
+    while (activityIndex < sessions.length && overrideFor(sessions[activityIndex])?.status === 'done') activityIndex += 1;
+  };
+  skipManagerDone();
+  if (!isDateKey(weekStart) || weekStart <= template.startWeek) return sessions[Math.min(activityIndex, sessions.length - 1)] || null;
 
   const slotTemplates = await TrainerSchoolTimetableTemplate.findAll({
     where: {
@@ -77,9 +81,11 @@ const activityForTemplateWeek = async (template, sessions, weekStart) => {
   while (cursor < target && activityIndex < sessions.length) {
     const assignments = assignmentsByWeek.get(cursor.toISOString().slice(0, 10)) || [];
     const currentSession = sessions[activityIndex];
-    const completed = assignments.some(assignment => Number(assignment.curriculumSessionId) === Number(currentSession.id) && assignment.completionStatus === 'completed');
+    const forcedOpen = overrideFor(currentSession) && overrideFor(currentSession).status !== 'done';
+    const completed = !forcedOpen && assignments.some(assignment => Number(assignment.curriculumSessionId) === Number(currentSession.id) && assignment.completionStatus === 'completed');
     if (completed) {
       activityIndex += 1;
+      skipManagerDone();
     }
     cursor.setUTCDate(cursor.getUTCDate() + 7);
   }
@@ -227,6 +233,7 @@ router.put('/school-trainers', auth, checkRole(['admin', 'manager', 'senior_mana
     if (!Number.isInteger(schoolId) || schoolId <= 0) return res.status(400).json({ error: 'Choose a valid school.' });
     const school = await SchoolCatalog.findByPk(schoolId);
     if (!school) return res.status(404).json({ error: 'School not found.' });
+    await assertSchoolAccess(req.user, [schoolId]);
     const managedTrainerCodes = await getManagedTrainerCodes(req.user);
     let validTrainerCodes = managedTrainerCodes;
     if (managedTrainerCodes) {
@@ -244,6 +251,7 @@ router.put('/school-trainers', auth, checkRole(['admin', 'manager', 'senior_mana
     return res.json({ success: true, schoolId, trainerIds });
   } catch (error) {
     if (transaction && !transaction.finished) await transaction.rollback();
+    if (scopeError(res, error)) return undefined;
     console.error('Error saving school trainer assignments:', error);
     return res.status(500).json({ error: 'Failed to save trainers assigned to this school.' });
   }
@@ -285,11 +293,12 @@ router.post('/school-timetable-templates', auth, checkRole(['admin', 'manager', 
       const trainer = await User.findOne({ where: { employeeCode: trainerId, role: 'employee' }, attributes: ['employeeCode'] });
       if (!trainer) return res.status(404).json({ error: 'Trainer not found.' });
     }
+    await assertSchoolAccess(req.user, [schoolId]);
     const [school, course] = await Promise.all([
       SchoolCatalog.findByPk(schoolId),
       SchoolCurriculumCourse.findByPk(courseId),
     ]);
-    if (!school || !course || Number(course.schoolId) !== schoolId) return res.status(400).json({ error: 'Choose a course belonging to the selected school.' });
+    if (!school || !course) return res.status(400).json({ error: 'Choose a school and a course.' });
     const startActivityPosition = Number(rawStartActivityPosition || 1);
     const startingSession = await SchoolCurriculumSession.findOne({ where: { courseId, position: startActivityPosition } });
     if (!startingSession) return res.status(400).json({ error: 'Choose an activity from the selected course.' });
@@ -311,6 +320,7 @@ router.post('/school-timetable-templates', auth, checkRole(['admin', 'manager', 
     });
     return res.status(201).json(template);
   } catch (error) {
+    if (scopeError(res, error)) return undefined;
     console.error('Error creating recurring school timetable:', error);
     return res.status(500).json({ error: 'Failed to save school timetable setup' });
   }
@@ -336,8 +346,9 @@ router.put('/school-timetable-templates/:id', auth, checkRole(['admin', 'manager
       const trainer = await User.findOne({ where: { employeeCode: trainerId, role: 'employee' }, attributes: ['employeeCode'] });
       if (!trainer) return res.status(404).json({ error: 'Trainer not found.' });
     }
+    await assertSchoolAccess(req.user, [schoolId]);
     const [school, course] = await Promise.all([SchoolCatalog.findByPk(schoolId), SchoolCurriculumCourse.findByPk(courseId)]);
-    if (!school || !course || Number(course.schoolId) !== schoolId) return res.status(400).json({ error: 'Choose a course belonging to the selected school.' });
+    if (!school || !course) return res.status(400).json({ error: 'Choose a school and a course.' });
     const startActivityPosition = Number(rawStartActivityPosition || 1);
     const startingSession = await SchoolCurriculumSession.findOne({ where: { courseId, position: startActivityPosition } });
     if (!startingSession) return res.status(400).json({ error: 'Choose an activity from the selected course.' });
@@ -349,6 +360,7 @@ router.put('/school-timetable-templates/:id', auth, checkRole(['admin', 'manager
     await TrainerSchoolAssignment.destroy({ where: { timetableTemplateId: template.id, weekStart: { [Op.gte]: resetWeek } } });
     return res.json(template);
   } catch (error) {
+    if (scopeError(res, error)) return undefined;
     console.error('Error updating recurring school timetable:', error);
     return res.status(500).json({ error: 'Failed to update school timetable setup' });
   }
@@ -512,6 +524,12 @@ router.put('/schools', auth, checkRole(['admin', 'manager', 'senior_manager']), 
       attributes: ['employeeCode']
     })).map(trainer => trainer.employeeCode);
     const requestedSchoolIds = [...new Set(assignments.map(assignment => Number(assignment.schoolId)).filter(Number.isInteger))];
+    try {
+      await assertSchoolAccess(req.user, requestedSchoolIds);
+    } catch (error) {
+      await transaction.rollback();
+      return res.status(error.status || 403).json({ error: error.message });
+    }
     const validSchoolIds = (await SchoolCatalog.findAll({ where: { id: { [Op.in]: requestedSchoolIds } }, attributes: ['id'] })).map(school => school.id);
     const requestedCurriculumSessionIds = [...new Set(assignments.map(assignment => Number(assignment.curriculumSessionId)).filter(id => Number.isInteger(id) && id > 0))];
     const curriculumSessions = requestedCurriculumSessionIds.length
@@ -545,9 +563,9 @@ router.put('/schools', auth, checkRole(['admin', 'manager', 'senior_manager']), 
       if (curriculumSessionId) {
         const curriculumSession = curriculumSessionById.get(curriculumSessionId);
         const curriculumCourse = curriculumSession && curriculumCourseById.get(curriculumSession.courseId);
-        if (!curriculumSession || !curriculumCourse || Number(curriculumCourse.schoolId) !== schoolId) {
+        if (!curriculumSession || !curriculumCourse) {
           await transaction.rollback();
-          return res.status(400).json({ error: 'Choose a curriculum activity belonging to the selected school.' });
+          return res.status(400).json({ error: 'Choose a valid curriculum activity.' });
         }
       }
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime || '') || !/^([01]\d|2[0-3]):[0-5]\d$/.test(endTime || '') || startTime >= endTime) {

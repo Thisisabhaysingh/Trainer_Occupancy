@@ -5,6 +5,7 @@ const { auth, checkRole } = require('../../middleware/auth');
 const { isEmailEnabled, buildCustomEmailHtml } = require('../../services/emailService');
 const { istToday } = require('../../services/schoolAssignmentGenerator');
 const mail = require('../../services/schoolActivityMailService');
+const { getAssignedSchoolIds, assertSchoolAccess } = require('../../services/managerScope');
 
 const router = express.Router();
 router.use(auth, checkRole(['admin', 'manager', 'senior_manager']));
@@ -69,8 +70,9 @@ router.get('/managers', checkRole(['admin']), handle(async (req, res) => {
 }));
 
 router.get('/schools', handle(async (req, res) => {
+  const allowedSchoolIds = await getAssignedSchoolIds(req.user);
   const [schools, contacts] = await Promise.all([
-    SchoolCatalog.findAll({ attributes: ['id', 'name'], order: [['name', 'ASC']] }),
+    SchoolCatalog.findAll({ where: allowedSchoolIds ? { id: { [Op.in]: allowedSchoolIds } } : {}, attributes: ['id', 'name'], order: [['name', 'ASC']] }),
     SchoolMailContact.findAll(),
   ]);
   const emailsBySchool = new Map(contacts.map(row => [row.schoolId, mail.parseEmails(row.emails)]));
@@ -122,6 +124,7 @@ router.post('/send-school', handle(async (req, res) => {
   const toDate = isDateKey(req.body?.toDate) ? req.body.toDate : istToday();
   const fromDate = isDateKey(req.body?.fromDate) ? req.body.fromDate : toDate;
   if (!Number.isInteger(schoolId) || !(await SchoolCatalog.findByPk(schoolId))) return res.status(404).json({ error: 'School not found.' });
+  await assertSchoolAccess(req.user, [schoolId]);
   const scope = await resolveScope(req, req.body?.scope);
   const managerId = scope === mail.GLOBAL_SCOPE ? null : scope;
   const setting = req.body?.setting

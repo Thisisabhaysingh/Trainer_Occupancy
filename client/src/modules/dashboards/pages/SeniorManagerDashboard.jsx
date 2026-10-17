@@ -17,6 +17,7 @@ import ProjectsDashboard from '../../../components/dashboard/ProjectsDashboard';
 import TrainerSchedulingDashboard from '../../../components/dashboard/TrainerSchedulingDashboard';
 import SchoolActivityMailSettings from '../../../components/dashboard/SchoolActivityMailSettings';
 import SchoolReport from '../../../components/dashboard/SchoolReport';
+import SchoolManagement from '../../../components/dashboard/SchoolManagement';
 import { getNavigationForRole } from '../../../core/navigation/roleNavigation';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
@@ -232,6 +233,7 @@ export default function SeniorManagerDashboard() {
         {active === 'traineroccupancy' && <TrainerSchedulingDashboard key="occupancy" mode="occupancy" employeeOptions={employees} />}
         {active === 'mailautomation' && <SchoolActivityMailSettings />}
         {active === 'schoolreport' && <SchoolReport />}
+        {active === 'schoolmanagement' && <SchoolManagement />}
       </Box>
     </Box>
   </Box>;

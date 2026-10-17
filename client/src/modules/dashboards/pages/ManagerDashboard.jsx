@@ -21,6 +21,7 @@ import ActivityTemplatesDashboard from '../../../components/dashboard/ActivityTe
 import TrainerSchedulingDashboard from '../../../components/dashboard/TrainerSchedulingDashboard';
 import SchoolActivityMailSettings from '../../../components/dashboard/SchoolActivityMailSettings';
 import SchoolReport from '../../../components/dashboard/SchoolReport';
+import SchoolManagement from '../../../components/dashboard/SchoolManagement';
 import { getNavigationForRole } from '../../../core/navigation/roleNavigation';
 import EmployeesDashboard from '../../../components/dashboard/EmployeesDashboard';
 import DepartmentsDashboard from '../../../components/dashboard/DepartmentsDashboard';
@@ -2951,6 +2952,8 @@ const ManagerDashboard = () => {
         {selectedTab === 11 && <SchoolActivityMailSettings />}
 
         {selectedTab === 12 && <SchoolReport />}
+
+        {selectedTab === 13 && <SchoolManagement />}
 
       {/* Add Member Dialog */}
       <AddMemberDialog

@@ -52,6 +52,7 @@ const navigationByRole = Object.freeze({
         { id: 'traineroccupancy', label: 'Trainer Occupancy', icon: 'calendar', tabIndex: 10 },
         { id: 'mailautomation', label: 'Mail Automation', icon: 'messages', tabIndex: 11 },
         { id: 'schoolreport', label: 'School Report', icon: 'reports', tabIndex: 12 },
+        { id: 'schoolmanagement', label: 'School Management', icon: 'trainer', tabIndex: 13 },
         { id: 'inventory', label: 'Inventory', icon: 'documents', route: '/inventory' },
       ],
     },
@@ -80,6 +81,8 @@ const navigationByRole = Object.freeze({
         { id: 'trainer occupancy', label: 'Trainer Occupancy', icon: 'calendar' },
         { id: 'mail automation', label: 'Mail Automation', icon: 'messages' },
         { id: 'school report', label: 'School Report', icon: 'reports' },
+        { id: 'school management', label: 'School Management', icon: 'trainer' },
+        { id: 'manager assignments', label: 'Manager Assignments', icon: 'users' },
         { id: 'team lead management', label: 'Team Lead Management', icon: 'people' },
         {
           id: 'project management', label: 'Project Management', icon: 'projects',

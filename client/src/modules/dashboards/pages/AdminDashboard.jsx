@@ -57,6 +57,8 @@ import './CalendarCustom.css';
 import PMProjectsManagement from '../../../components/pm/ProjectsManagement';
 import SchoolActivityMailSettings from '../../../components/dashboard/SchoolActivityMailSettings';
 import SchoolReport from '../../../components/dashboard/SchoolReport';
+import SchoolManagement from '../../../components/dashboard/SchoolManagement';
+import ManagerAssignments from '../../../components/dashboard/ManagerAssignments';
 import { StatCard, PageHeader, FilterBar, DataTable, TabNavigation, Pagination, StatusChip, AvatarCell, Sidebar, Header, Breadcrumb, typography } from '../../../components/dashboard/DashboardComponents';
 import { getNavigationForRole } from '../../../core/navigation/roleNavigation';
 
@@ -72,7 +74,7 @@ const projectPageLabels = {
   'job progress': 'Project Management',
   'job analytics': 'Project Management'
 };
-const adminTabLabels = ['Overview', 'Departments', 'Employees', 'Calendar', 'Reports', 'Manage Employees', 'Manage Departments', 'Activity Templates', 'School Catalog', 'Trainer Occupancy', 'Team Lead Management', 'Tools', 'Project Management', 'Mail Automation', 'School Report'];
+const adminTabLabels = ['Overview', 'Departments', 'Employees', 'Calendar', 'Reports', 'Manage Employees', 'Manage Departments', 'Activity Templates', 'School Catalog', 'Trainer Occupancy', 'Team Lead Management', 'Tools', 'Project Management', 'Mail Automation', 'School Report', 'School Management', 'Manager Assignments'];
 const getInitialAdminTab = (search) => {
   const section = new URLSearchParams(search).get('section');
   const tabIndex = adminTabLabels.findIndex((label) => label.toLowerCase() === section);
@@ -5688,6 +5690,10 @@ const AdminDashboard = () => {
           {selectedTab === 13 && <SchoolActivityMailSettings isAdmin />}
 
           {selectedTab === 14 && <SchoolReport isAdmin />}
+
+          {selectedTab === 15 && <SchoolManagement isAdmin />}
+
+          {selectedTab === 16 && <ManagerAssignments />}
 
           {selectedTab === 12 && (
             <Box>

@@ -4,6 +4,7 @@ const {
   TrainerSchoolTimetableTemplate,
   TrainerSchoolAssignment,
 } = require('../models');
+const { loadOverrides, applyToCompletedSet } = require('./curriculumOverrides');
 
 const weekDates = (weekStart) => Array.from({ length: 7 }, (_, index) => {
   const date = new Date(`${weekStart}T00:00:00Z`);
@@ -51,6 +52,7 @@ const materializeTrainerWeek = async (trainerId, today = istToday()) => {
     if (assignment.curriculumSessionId) sessionIds.add(Number(assignment.curriculumSessionId));
     completedSessionsByGroup.set(group, sessionIds);
   }
+  const overrides = await loadOverrides(templates);
   const generated = [];
   for (const template of templates) {
     if (existingTemplateIds.has(Number(template.id))) continue;
@@ -59,7 +61,9 @@ const materializeTrainerWeek = async (trainerId, today = istToday()) => {
     const sessions = await SchoolCurriculumSession.findAll({ where: { courseId: template.courseId }, order: [['position', 'ASC']] });
     const initialIndex = Math.max(0, sessions.findIndex(session => Number(session.position) === Number(template.startActivityPosition || 1)));
     const groupKey = relatedGroupByTemplate.get(Number(template.id));
-    const session = sessions[initialIndex + (completedSessionsByGroup.get(groupKey)?.size || 0)];
+    const completed = applyToCompletedSet(completedSessionsByGroup.get(groupKey) || new Set(), overrides, template.schoolId, template.className, sessions.map(item => item.id));
+    // Next activity = first one from the starting position that is not completed.
+    const session = sessions.slice(initialIndex).find(item => !completed.has(Number(item.id)));
     if (!session) continue;
     generated.push({
       managerId: template.managerId,
